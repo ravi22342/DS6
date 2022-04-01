@@ -73,7 +73,7 @@ if __name__ == '__main__':
 
     parser.add_argument('-load_path',
                         # default="/home/schatter/Soumick/Output/DS6/OrigVol_MaskedFDIPv0_UNetV2/checkpoint",
-                        default="/home/schatter/Soumick/Output/DS6/OriginalVols_FDPv0/UNetMSS_X2_Deform/checkpoint/",
+                        default="",
                         help="Path to checkpoint of existing model to load, ex:/home/model/checkpoint")
     parser.add_argument('-load_best',
                         default=True,
@@ -89,7 +89,9 @@ if __name__ == '__main__':
     parser.add_argument('-apex',
                         default=True,
                         help="To use half precision on model weights.")
-
+    parser.add_argument('-load_volumes_only',
+                        default=False,
+                        help="To examine train_loader.")
     parser.add_argument("-batch_size",
                         type=int,
                         default=15,
@@ -100,7 +102,7 @@ if __name__ == '__main__':
                         help="Number of epochs for training")
     parser.add_argument("-learning_rate",
                         type=float,
-                        default=0.001,
+                        default=0.01,
                         help="Learning rate")
     parser.add_argument("-patch_size",
                         type=int,
@@ -126,6 +128,19 @@ if __name__ == '__main__':
                         type=int,
                         default=8,
                         help="Number of worker threads")
+    parser.add_argument("-dataloader_testing",
+                        default=False,
+                        help="Test the dataloader and sampling")
+    parser.add_argument("-debug_validation",
+                        default=False,
+                        help="Test the validation for a specific epoch")
+    parser.add_argument("-validation_test_epoch",
+                        type=int,
+                        default=32,
+                        help="Epoch for debugging validation")
+    parser.add_argument("-testing_sample_patches",
+                        default=False,
+                        help="Test the samples resulting in nan")
 
     args = parser.parse_args()
 
@@ -155,27 +170,39 @@ if __name__ == '__main__':
     writer_validating = SummaryWriter(TENSORBOARD_PATH_VALIDATION)
 
     pipeline = Pipeline(cmd_args=args, model=model, logger=logger,
-                        dir_path=DATASET_FOLDER, checkpoint_path=CHECKPOINT_PATH, 
+                        dir_path=DATASET_FOLDER, checkpoint_path=CHECKPOINT_PATH,
                         writer_training=writer_training, writer_validating=writer_validating)
-
     # loading existing checkpoint if supplied
-    if bool(LOAD_PATH):
-        pipeline.load(checkpoint_path=LOAD_PATH, load_best=args.load_best)
-
-    # try:
-
-    if args.train:
-        pipeline.train()
+    if args.load_volumes_only:
+        pipeline.test_loaded_volumes()
         torch.cuda.empty_cache()  # to avoid memory errors
+    else:
+        if bool(LOAD_PATH):
+            pipeline.load(checkpoint_path=LOAD_PATH, load_best=args.load_best)
+        if(args.testing_sample_patches):
+            pipeline.psuedo_train()
+            torch.cuda.empty_cache()
+        elif(args.dataloader_testing):
+            pipeline.dataloader_testing()
+        elif(args.debug_validation):
+            pipeline.debug_validation(50, args.validation_test_epoch)
+        else:
 
-    if args.test:
-        if args.load_best:
-            pipeline.load(load_best=True)
-        pipeline.test(test_logger=test_logger)
-        torch.cuda.empty_cache()  # to avoid memory errors
 
-    if args.predict:
-        pipeline.predict(args.predictor_path, args.predictor_label_path, predict_logger=test_logger)
+            # try:
+
+            if args.train:
+                pipeline.train()
+                torch.cuda.empty_cache()  # to avoid memory errors
+
+            if args.test:
+                if args.load_best:
+                    pipeline.load(load_best=True)
+                pipeline.test(test_logger=test_logger)
+                torch.cuda.empty_cache()  # to avoid memory errors
+
+            if args.predict:
+                pipeline.predict(args.predictor_path, args.predictor_label_path, predict_logger=test_logger)
 
 
     # except Exception as error:
