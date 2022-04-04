@@ -65,6 +65,7 @@ class SRDataset(Dataset):
         self.pre_load = pre_load
         self.pre_loaded_lbl = {}
         self.pre_loaded_img = {}
+        self.pre_loaded_lbl_data = {}
 
         if not self.norm_data:
             print("No Norm")  # TODO remove
@@ -128,9 +129,13 @@ class SRDataset(Dataset):
             #     labelFileName)  # shape (Length X Width X Depth X Channels) - changed to label file name as input image can have different (lower) size
             labelFile = tio.LabelMap(
                 labelFileName)  # shape (Length X Width X Depth X Channels) - changed to label file name as input image can have different (lower) size
-            labelFile_data, labelFile_affine = labelFile.data, labelFile.affine
-            header_shape = labelFile_data.shape
+            labelFile_data = nibabel.load(labelFileName).get_data()
+            # labelFile_data, labelFile_affine = labelFile.data, labelFile.affine
+            header_shape = labelFile.data.shape
             labelFile_max = labelFile_data.max()
+            label_filename_trimmed = labelFileName.split("\\")
+            if label_filename_trimmed:
+                label_filename_trimmed = label_filename_trimmed[len(label_filename_trimmed) - 1]
 
             # imageFile = nibabel.load(imageFileName)  # shape (Length X Width X Depth X Channels)
             # header_shape_us = imageFile.header.get_data_shape()
@@ -150,7 +155,8 @@ class SRDataset(Dataset):
 
             if self.pre_load:
                 self.pre_loaded_img[imageFileName] = imageFile_data
-                self.pre_loaded_lbl[labelFileName] = labelFile_data
+                self.pre_loaded_lbl[labelFileName] = labelFile.data
+                self.pre_loaded_lbl_data[label_filename_trimmed] = labelFile_data
 
             if patch_size != 1 and (n_depth < patch_size or n_length < patch_size or n_width < patch_size):
                 self.logger.debug(
@@ -269,8 +275,8 @@ class SRDataset(Dataset):
             groundTruthImages = self.pre_loaded_lbl[self.data.iloc[index, 3]]
             groundTruthImages_handler = groundTruthImages
         else:
-            groundTruthImages = nibabel.load(self.data.iloc[index, 3]) # TODO: Update this to tio.ScalarImage
-            groundTruthImages_handler = groundTruthImages.dataobj
+            groundTruthImages = tio.LabelMap(self.data.iloc[index, 3]) # TODO: Update this to tio.ScalarImage
+            groundTruthImages_handler = groundTruthImages.data
 
         startIndex_depth = self.data.iloc[index, 6]
         startIndex_length = self.data.iloc[index, 7]
@@ -311,10 +317,10 @@ class SRDataset(Dataset):
                 images = self.pre_loaded_img[self.data.iloc[index, 0]]
                 images_handler = images
             else:
-                images = nibabel.load(self.data.iloc[index, 0]) # TODO change this to use tio.ScalarImage
-                images_handler = images.dataobj
+                images = tio.ScalarImage(self.data.iloc[index, 0]) # TODO change this to use tio.ScalarImage
+                images_handler = images
 
-            images = nibabel.load(self.data.iloc[index, 0])
+            # images = nibabel.load(self.data.iloc[index, 0])
             if self.patch_size_us is not None:
                 voxel = images_handler[:, startIndex_width_us:startIndex_width_us + self.patch_size_us,
                         startIndex_length_us:startIndex_length_us + self.patch_size_us,

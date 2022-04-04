@@ -128,6 +128,14 @@ if __name__ == '__main__':
                         type=int,
                         default=8,
                         help="Number of worker threads")
+    parser.add_argument("-floss_coeff",
+                        type=float,
+                        default=0.5,
+                        help="Loss coefficient for floss in total loss")
+    parser.add_argument("-mip_loss_coeff",
+                        type=float,
+                        default=0.5,
+                        help="Loss coefficient for mip_loss in total loss")
     parser.add_argument("-dataloader_testing",
                         default=False,
                         help="Test the dataloader and sampling")
@@ -141,6 +149,9 @@ if __name__ == '__main__':
     parser.add_argument("-testing_sample_patches",
                         default=False,
                         help="Test the samples resulting in nan")
+    parser.add_argument("-create_mips",
+                        default=False,
+                        help="Create MIPs of the input labels")
 
     args = parser.parse_args()
 
@@ -173,7 +184,11 @@ if __name__ == '__main__':
                         dir_path=DATASET_FOLDER, checkpoint_path=CHECKPOINT_PATH,
                         writer_training=writer_training, writer_validating=writer_validating)
     # loading existing checkpoint if supplied
-    if args.load_volumes_only:
+    if args.create_mips:
+        pipeline.create_mip_from_labels()
+        torch.cuda.empty_cache()  # to avoid memory errors
+
+    elif args.load_volumes_only:
         pipeline.test_loaded_volumes()
         torch.cuda.empty_cache()  # to avoid memory errors
     else:
