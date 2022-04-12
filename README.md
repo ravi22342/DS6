@@ -9,7 +9,7 @@ DS6 = Deformation-aware Segmentation, trained on 6 MR Volumes.
 
 ## Credits
 
-If you like this repository, please click on Star!
+If you like this repository, please click on Star
 
 If you use this approach in your research or use codes from this repository, please cite the following in your publications:
 
