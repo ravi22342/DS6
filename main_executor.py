@@ -170,7 +170,11 @@ if __name__ == '__main__':
 
     if args.test:
         if args.load_best:
-            pipeline.load(load_best=True)
+            if bool(LOAD_PATH):
+                # pipeline.load(checkpoint_path=LOAD_PATH, load_best=args.load_best)
+                pass
+            else:
+                pipeline.load(load_best=True)
         pipeline.test(test_logger=test_logger)
         torch.cuda.empty_cache()  # to avoid memory errors
 
