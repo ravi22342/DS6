@@ -7,6 +7,7 @@ Purpose :
 '''
 
 
+from email.policy import strict
 import os
 
 import matplotlib.pyplot as plt
@@ -81,7 +82,7 @@ def load_model(model, optimizer, CHECKPOINT_PATH, batch_index='best', filename='
     """
     print('Loading model...')
     checkpoint = torch.load(os.path.join(CHECKPOINT_PATH, filename + str(batch_index) + '.pth'))
-    model.load_state_dict(checkpoint['state_dict'])
+    model.load_state_dict(checkpoint['state_dict'],strict=False)
     optimizer.load_state_dict(checkpoint['optimizer'])
     model.eval()
     return model, optimizer
@@ -95,7 +96,7 @@ def load_model_with_amp(model, optimizer, CHECKPOINT_PATH, batch_index='best', f
     print('Loading model...')
     model.cuda()
     checkpoint = torch.load(os.path.join(CHECKPOINT_PATH, filename + str(batch_index) + '.pth'))
-    model.load_state_dict(checkpoint['state_dict'])
+    model.load_state_dict(checkpoint['state_dict'],strict=False)
     optimizer.load_state_dict(checkpoint['optimizer'])
     scaler = GradScaler()
     scaler.load_state_dict(checkpoint['amp'])
