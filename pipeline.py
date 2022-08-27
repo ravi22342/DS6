@@ -202,10 +202,10 @@ class Pipeline:
                         if type(output) is tuple or type(output) is list:
                             output = output[0]
                         output = torch.sigmoid(output)
-                        output = torch.movedim(output, -3, -1)
+                        output = torch.movedim(output, -3, -1).detach().cpu().type(local_batch.type())
                         aggregator.add_batch(output, locations)
                     torch.cuda.empty_cache()  # to avoid memory errors
-                output = aggregator.get_output_tensor()
+                output = aggregator.get_output_tensor().cuda()
                 try:
                     thresh = threshold_otsu(output)
                     output = predicted > thresh
