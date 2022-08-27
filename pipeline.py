@@ -181,37 +181,46 @@ class Pipeline:
             vol_index = 0
             total_floss, total_mip_loss, total_loss = 0, 0, 0
             random.shuffle(traindataset)
-            overlap = np.subtract(self.patch_size, (self.stride_length, self.stride_width, self.stride_depth))
+            # overlap = np.subtract(self.patch_size, (self.stride_length, self.stride_width, self.stride_depth))
             for train_subject in traindataset:
-                grid_sampler = tio.inference.GridSampler(
-                    train_subject,
-                    self.patch_size,
-                    overlap,
-                )
-                aggregator = tio.inference.GridAggregator(grid_sampler, overlap_mode="average")
-                patch_loader = torch.utils.data.DataLoader(grid_sampler, batch_size=self.batch_size, shuffle=False,
-                                                           num_workers=self.num_worker)
-                for batch_index, patches_batch in enumerate(tqdm(patch_loader)):
-                    local_batch = self.normaliser(patches_batch['img'][tio.DATA].float().cuda())
-                    local_batch = torch.movedim(local_batch, -1, -3)
-                    locations = patches_batch[tio.LOCATION]
-                    self.logger.debug('Epoch: {} Batch Index: {}'.format(epoch, batch_index))
-
-                    with autocast(enabled=self.with_apex):
-                        output = self.model(local_batch)
-                        if type(output) is tuple or type(output) is list:
-                            output = output[0]
-                        output = torch.sigmoid(output)
-                        output = torch.movedim(output, -3, -1).detach().cpu().type(local_batch.type())
-                        aggregator.add_batch(output, locations)
-                    torch.cuda.empty_cache()  # to avoid memory errors
-                output = aggregator.get_output_tensor().cuda()
-                try:
-                    thresh = threshold_otsu(output)
-                    output = predicted > thresh
-                except Exception as error:
-                    self.logger.exception(error)
-                    output = output > 0.5
+                # grid_sampler = tio.inference.GridSampler(
+                #     train_subject,
+                #     self.patch_size,
+                #     overlap,
+                # )
+                # aggregator = tio.inference.GridAggregator(grid_sampler, overlap_mode="average")
+                # patch_loader = torch.utils.data.DataLoader(grid_sampler, batch_size=self.batch_size, shuffle=False,
+                #                                            num_workers=self.num_worker)
+                #
+                # for batch_index, patches_batch in enumerate(tqdm(patch_loader)):
+                #     local_batch = self.normaliser(patches_batch['img'][tio.DATA].float().cuda())
+                #     local_batch = torch.movedim(local_batch, -1, -3)
+                #     locations = patches_batch[tio.LOCATION]
+                #     self.logger.debug('Epoch: {} Batch Index: {}'.format(epoch, batch_index))
+                #
+                #     with autocast(enabled=self.with_apex):
+                #         output = self.model(local_batch)
+                #         if type(output) is tuple or type(output) is list:
+                #             output = output[0]
+                #         output = torch.sigmoid(output)
+                #         output = torch.movedim(output, -3, -1)#.detach().cpu().type(local_batch.type())
+                #         outputs.append(output)
+                #         # aggregator.add_batch(output, locations)
+                #     torch.cuda.empty_cache()  # to avoid memory errors
+                # output = aggregator.get_output_tensor().cuda()
+                vol = self.normaliser(train_subject['img'][tio.DATA].float().cuda())
+                vol = torch.reshape(vol, (1, 1, vol.shape[1], vol.shape[2], vol.shape[3]))
+                with autocast(enabled=self.with_apex):
+                    output = self.model(vol)
+                    if type(output) is tuple or type(output) is list:
+                        output = output[0]
+                    output = torch.sigmoid(output)
+                # try:
+                #     thresh = threshold_otsu(output)
+                #     output = output > thresh
+                # except Exception as error:
+                #     self.logger.exception(error)
+                #     output = output > 0.5
                 label = train_subject['label'][tio.DATA].float().cuda()
                 floss = self.focalTverskyLoss(output, label)
                 label_mip = torch.amax(label.squeeze(), -1)
@@ -485,39 +494,46 @@ class Pipeline:
             vol_index = 0
             total_floss, total_mip_loss, total_loss = 0, 0, 0
             random.shuffle(validationdataset)
-            overlap = np.subtract(self.patch_size, (self.stride_length, self.stride_width, self.stride_depth))
+            # overlap = np.subtract(self.patch_size, (self.stride_length, self.stride_width, self.stride_depth))
             for validate_subject in validationdataset:
-                grid_sampler = tio.inference.GridSampler(
-                    validate_subject,
-                    self.patch_size,
-                    overlap,
-                )
-                aggregator = tio.inference.GridAggregator(grid_sampler, overlap_mode="average")
-                patch_loader = torch.utils.data.DataLoader(grid_sampler, batch_size=self.batch_size, shuffle=False,
-                                                           num_workers=self.num_worker)
-                for batch_index, patches_batch in enumerate(tqdm(patch_loader)):
-                    local_batch = self.normaliser(patches_batch['img'][tio.DATA].float().cuda())
-                    local_batch = torch.movedim(local_batch, -1, -3)
-                    locations = patches_batch[tio.LOCATION]
-                    # Transfer to GPU
-                    self.logger.debug('Epoch: {} Batch Index: {}'.format(epoch, batch_index))
-                    # Clear gradients
-                    self.optimizer.zero_grad()
-                    with autocast(enabled=self.with_apex):
-                        output = self.model(local_batch)
-                        if type(output) is tuple or type(output) is list:
-                            output = output[0]
-                        output = torch.sigmoid(output)
-                        output = torch.movedim(output, -3, -1)
-                        aggregator.add_batch(output, locations)
-                output = aggregator.get_output_tensor()
-                try:
-                    thresh = threshold_otsu(output)
-                    output = predicted > thresh
-                except Exception as error:
-                    self.logger.exception(error)
-                    output = output > 0.5
-                label = train_subject['label'][tio.DATA].float().cuda()
+                # grid_sampler = tio.inference.GridSampler(
+                #     validate_subject,
+                #     self.patch_size,
+                #     overlap,
+                # )
+                # aggregator = tio.inference.GridAggregator(grid_sampler, overlap_mode="average")
+                # patch_loader = torch.utils.data.DataLoader(grid_sampler, batch_size=self.batch_size, shuffle=False,
+                #                                            num_workers=self.num_worker)
+                # for batch_index, patches_batch in enumerate(tqdm(patch_loader)):
+                #     local_batch = self.normaliser(patches_batch['img'][tio.DATA].float().cuda())
+                #     local_batch = torch.movedim(local_batch, -1, -3)
+                #     locations = patches_batch[tio.LOCATION]
+                #     # Transfer to GPU
+                #     self.logger.debug('Epoch: {} Batch Index: {}'.format(epoch, batch_index))
+                #     # Clear gradients
+                #     self.optimizer.zero_grad()
+                #     with autocast(enabled=self.with_apex):
+                #         output = self.model(local_batch)
+                #         if type(output) is tuple or type(output) is list:
+                #             output = output[0]
+                #         output = torch.sigmoid(output)
+                #         output = torch.movedim(output, -3, -1)
+                #         aggregator.add_batch(output, locations)
+                # output = aggregator.get_output_tensor()
+                vol = self.normaliser(validate_subject['img'][tio.DATA].float().cuda())
+                vol = torch.reshape(vol, (1, 1, vol.shape[1], vol.shape[2], vol.shape[3]))
+                with autocast(enabled=self.with_apex):
+                    output = self.model(vol)
+                    if type(output) is tuple or type(output) is list:
+                        output = output[0]
+                    output = torch.sigmoid(output)
+                # try:
+                #     thresh = threshold_otsu(output)
+                #     output = predicted > thresh
+                # except Exception as error:
+                #     self.logger.exception(error)
+                #     output = output > 0.5
+                label = validate_subject['label'][tio.DATA].float().cuda()
                 floss = self.focalTverskyLoss(output, label)
                 label_mip = torch.amax(label.squeeze(), -1)
                 output_mip = torch.amax(output.squeeze(), -1)
