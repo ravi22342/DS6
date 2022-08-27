@@ -175,6 +175,9 @@ class Pipeline:
         for epoch in range(self.num_epochs):
             print("Train Epoch: " + str(epoch) + " of " + str(self.num_epochs))
             self.model.train()  # make sure to assign mode:train, because in validation, mode is assigned as eval
+
+            # Clear gradients
+            self.optimizer.zero_grad()
             vol_index = 0
             total_floss, total_mip_loss, total_loss = 0, 0, 0
             random.shuffle(traindataset)
@@ -192,10 +195,8 @@ class Pipeline:
                     local_batch = self.normaliser(patches_batch['img'][tio.DATA].float().cuda())
                     local_batch = torch.movedim(local_batch, -1, -3)
                     locations = patches_batch[tio.LOCATION]
-                    # Transfer to GPU
                     self.logger.debug('Epoch: {} Batch Index: {}'.format(epoch, batch_index))
-                    # Clear gradients
-                    self.optimizer.zero_grad()
+
                     with autocast(enabled=self.with_apex):
                         output = self.model(local_batch)
                         if type(output) is tuple or type(output) is list:
@@ -203,6 +204,7 @@ class Pipeline:
                         output = torch.sigmoid(output)
                         output = torch.movedim(output, -3, -1)
                         aggregator.add_batch(output, locations)
+                    torch.cuda.empty_cache()  # to avoid memory errors
                 output = aggregator.get_output_tensor()
                 try:
                     thresh = threshold_otsu(output)
