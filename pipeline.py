@@ -204,8 +204,7 @@ class Pipeline:
                             output = output[0]
                         output = torch.sigmoid(output)
                         output = torch.movedim(output, -3, -1)#.detach().cpu().type(local_batch.type())
-                        outputs.append(output)
-                        # aggregator.add_batch(output, locations)
+                        aggregator.add_batch(output, locations)
                     torch.cuda.empty_cache()  # to avoid memory errors
                 output = aggregator.get_output_tensor()#.cuda()
                 # vol = self.normaliser(train_subject['img'][tio.DATA].float().cuda())
