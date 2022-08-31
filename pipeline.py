@@ -262,7 +262,7 @@ class Pipeline:
                             if level == 0:
                                 output1 = output
                             if level > 0:  # then the output size is reduced, and hence interpolate to patch_size
-                                output = torch.nn.functional.interpolate(input=output, size=(64, 64, 64))
+                                output = torch.nn.functional.interpolate(input=output, size=(32, 32, 32))
                             output = torch.sigmoid(output)
                             dl_batch, ds_batch = self.dice(output, local_labels)
                             IOU_score = self.iou(output, local_labels)
@@ -317,7 +317,7 @@ class Pipeline:
                             if level == 0:
                                 output2 = output
                             if level > 0:  # then the output size is reduced, and hence interpolate to patch_size
-                                output = torch.nn.functional.interpolate(input=output, size=(64, 64, 64))
+                                output = torch.nn.functional.interpolate(input=output, size=(32, 32, 32))
 
                             output = torch.sigmoid(output)
                             floss2 += loss_ratios[level] * self.focalTverskyLoss(output, local_labels_xt)
@@ -334,7 +334,7 @@ class Pipeline:
                         floss = floss + floss2 + floss_c
 
                     else:
-                        floss = (self.floss_coeff * floss) + (self.mip_loss_coeff * mip_loss)
+                        floss = (self.model.floss_coeff * floss) + ((1 - self.model.floss_coeff) * mip_loss)
 
 
 

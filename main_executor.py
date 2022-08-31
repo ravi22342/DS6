@@ -137,11 +137,11 @@ if __name__ == '__main__':
                         help="Number of worker threads")
     parser.add_argument("-floss_coeff",
                         type=float,
-                        default=1.0,
+                        default=0.7,
                         help="Loss coefficient for floss in total loss")
     parser.add_argument("-mip_loss_coeff",
                         type=float,
-                        default=0.5,
+                        default=0.3,
                         help="Loss coefficient for mip_loss in total loss")
     parser.add_argument("-floss_param_smooth",
                         type=float,
@@ -199,7 +199,7 @@ if __name__ == '__main__':
     }
 
     # Model
-    model = getModel(args.model, OUTPUT_PATH + "/" + MODEL_NAME)
+    model = getModel(args.model, args.floss_coeff, OUTPUT_PATH + "/" + MODEL_NAME)
     model.cuda()
 
     writer_training = SummaryWriter(TENSORBOARD_PATH_TRAINING)

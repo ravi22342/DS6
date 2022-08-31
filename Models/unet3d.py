@@ -175,8 +175,9 @@ class U_Net_DeepSup(nn.Module):
     Paper : https://arxiv.org/abs/1505.04597
     """
 
-    def __init__(self, in_ch=1, out_ch=1, output_dir=None):
+    def __init__(self, in_ch=1, out_ch=1, floss_coeff=0.7, output_dir=None):
         super(U_Net_DeepSup, self).__init__()
+        self.floss_coeff = torch.nn.Parameter(torch.tensor(floss_coeff))
 
         self.output_dir = output_dir
         n1 = 64
