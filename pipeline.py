@@ -257,7 +257,7 @@ class Pipeline:
                             if level == 0:
                                 output1 = output
                             if level > 0:  # then the output size is reduced, and hence interpolate to patch_size
-                                output = torch.nn.functional.interpolate(input=output, size=(32, 32, 32))
+                                output = torch.nn.functional.interpolate(input=output, size=(64, 64, 64))
                             output = torch.sigmoid(output)
                             floss += loss_ratios[level] * self.focalTverskyLoss(output, local_labels)
                             # Compute MIP loss from the patch on the MIP of the 3D label and the patch prediction
