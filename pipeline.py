@@ -414,10 +414,10 @@ class Pipeline:
             self.logger.info("Epoch:" + str(epoch) + " Average Training..." +
                              "\n focalTverskyLoss:" + str(total_floss) + " diceLoss: " + str(
                 total_DiceLoss) + " diceScore: " + str(total_DiceScore) + " iou: " + str(
-                total_IOU) + " mipLoss: " + str(total_mipLoss))
+                total_IOU) + " mipLoss: " + str(total_mipLoss) + " floss_coeff: " + str(self.model.floss_coeff))
             write_Epoch_summary(self.writer_training, epoch, focalTverskyLoss=total_floss, mipLoss=total_mipLoss,
                                 diceLoss=total_DiceLoss, diceScore=total_DiceScore, iou=total_IOU)
-            self.wandb.log({"focalTverskyLoss_train": total_floss, "mipLoss_train": total_mipLoss})
+            self.wandb.log({"focalTverskyLoss_train": total_floss, "mipLoss_train": total_mipLoss, "floss_coeff": round(self.model.floss_coeff.item(), 3)})
 
             save_model(self.checkpoint_path, {
                 'epoch_type': 'last',
