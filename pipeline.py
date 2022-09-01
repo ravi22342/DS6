@@ -223,10 +223,8 @@ class Pipeline:
             print("Train Epoch: " + str(epoch) + " of " + str(self.num_epochs))
             self.model.train()  # make sure to assign mode:train, because in validation, mode is assigned as eval
             total_floss = 0
-            total_mipLoss = 0
-            total_DiceLoss = 0
-            total_IOU = 0
-            total_DiceScore = 0
+            total_mip_loss = 0
+            total_loss = 0
             batch_index = 0
             for batch_index, patches_batch in enumerate(tqdm(self.train_loader)):
 
@@ -250,9 +248,6 @@ class Pipeline:
                     mip_loss = torch.tensor(0.001).float().cuda()
                     output1 = 0
                     level = 0
-                    diceLoss_batch = 0
-                    diceScore_batch = 0
-                    IOU_batch = 0
 
                     # -------------------------------------------------------------------------------------------------
                     # First Branch Supervised error
@@ -262,13 +257,8 @@ class Pipeline:
                             if level == 0:
                                 output1 = output
                             if level > 0:  # then the output size is reduced, and hence interpolate to patch_size
-                                output = torch.nn.functional.interpolate(input=output, size=(64, 64, 64))
+                                output = torch.nn.functional.interpolate(input=output, size=(32, 32, 32))
                             output = torch.sigmoid(output)
-                            dl_batch, ds_batch = self.dice(output, local_labels)
-                            IOU_score = self.iou(output, local_labels)
-                            diceLoss_batch += dl_batch.detach().item()
-                            diceScore_batch += ds_batch.detach().item()
-                            IOU_batch += IOU_score.detach().item()
                             floss += loss_ratios[level] * self.focalTverskyLoss(output, local_labels)
                             # Compute MIP loss from the patch on the MIP of the 3D label and the patch prediction
                             mip_loss_patch = torch.tensor(0.001).float().cuda()
@@ -334,7 +324,7 @@ class Pipeline:
                         floss = floss + floss2 + floss_c
 
                     else:
-                        floss = (self.model.floss_coeff * floss) + ((1 - self.model.floss_coeff) * mip_loss)
+                        loss = (self.model.floss_coeff * floss) + ((1 - self.model.floss_coeff) * mip_loss)
 
 
 
@@ -343,21 +333,19 @@ class Pipeline:
                 #     sys.exit()
 
                 self.logger.info("Epoch:" + str(epoch) + " Batch_Index:" + str(batch_index) + " Training..." +
-                                 "\n focalTverskyLoss: " + str(floss) + " diceLoss: " + str(
-                    diceLoss_batch) + " diceScore: " + str(diceScore_batch) + " iou: " + str(
-                    IOU_batch) + " mipLoss: " + str(mip_loss))
+                                 "\n focalTverskyLoss: " + str(floss) + " mipLoss: " + str(mip_loss) + " totalLoss: " + str(loss))
 
                 # Calculating gradients
                 if self.with_apex:
-                    if type(floss) is list:
-                        for i in range(len(floss)):
-                            if i + 1 == len(floss):  # final loss
-                                self.scaler.scale(floss[i]).backward()
+                    if type(loss) is list:
+                        for i in range(len(loss)):
+                            if i + 1 == len(loss):  # final loss
+                                self.scaler.scale(loss[i]).backward()
                             else:
-                                self.scaler.scale(floss[i]).backward(retain_graph=True)
-                        floss = torch.sum(torch.stack(floss))
+                                self.scaler.scale(loss[i]).backward(retain_graph=True)
+                        loss = torch.sum(torch.stack(loss))
                     else:
-                        self.scaler.scale(floss).backward()
+                        self.scaler.scale(loss).backward()
 
                     if self.clip_grads:
                         self.scaler.unscale_(self.optimizer)
@@ -367,8 +355,8 @@ class Pipeline:
                     self.scaler.step(self.optimizer)
                     self.scaler.update()
                 else:
-                    if not torch.any(torch.isnan(floss)):
-                        floss.backward()
+                    if not torch.any(torch.isnan(loss)):
+                        loss.backward()
                     else:
                         self.logger.info("nan found in floss.... no backpropagation!!")
                     if self.clip_grads:
@@ -377,25 +365,17 @@ class Pipeline:
 
                     self.optimizer.step()
 
-                if training_batch_index % 50 == 0:  # Save best metric evaluation weights
-                    write_summary(self.writer_training, self.logger, training_batch_index,
-                                  focalTverskyLoss=floss.detach().item(), mipLoss=mip_loss.detach().item(),
-                                  diceLoss=diceLoss_batch, diceScore=diceScore_batch, iou=IOU_batch)
+                # if training_batch_index % 50 == 0:  # Save best metric evaluation weights
+                #     write_summary(self.writer_training, self.logger, training_batch_index,
+                #                   focalTverskyLoss=floss.detach().item(), mipLoss=mip_loss.detach().item(), totalLoss=loss.detach().item())
                 training_batch_index += 1
 
                 # Initialising the average loss metrics
                 total_floss += floss.detach().item()
                 # Compute total DiceLoss, DiceScore and IOU per batch
-                if (num_patches > 0):
-                    diceLoss_batch = diceLoss_batch / num_patches
-                    diceScore_batch = diceScore_batch / num_patches
-                    IOU_batch = IOU_batch / num_patches
-                    mip_loss = mip_loss / num_patches
 
-                total_DiceLoss += diceLoss_batch
-                total_DiceScore += diceScore_batch
-                total_IOU += IOU_batch
-                total_mipLoss += mip_loss
+                total_mip_loss += mip_loss.detach().item()
+                total_loss += loss.detach().item()
 
                 if self.deform:
                     del elastic
@@ -403,21 +383,14 @@ class Pipeline:
 
             # Calculate the average loss per batch in one epoch
             total_floss /= (batch_index + 1.0)
-            total_mipLoss /= (batch_index + 1.0)
-
-            # Calculate the average DiceLoss, DiceScore and IOU per epoch
-            total_DiceLoss /= (batch_index + 1.0)
-            total_DiceScore /= (batch_index + 1.0)
-            total_IOU /= (batch_index + 1.0)
+            total_mip_loss /= (batch_index + 1.0)
+            total_loss /= (batch_index + 1.0)
 
             # Print every epoch
             self.logger.info("Epoch:" + str(epoch) + " Average Training..." +
-                             "\n focalTverskyLoss:" + str(total_floss) + " diceLoss: " + str(
-                total_DiceLoss) + " diceScore: " + str(total_DiceScore) + " iou: " + str(
-                total_IOU) + " mipLoss: " + str(total_mipLoss) + " floss_coeff: " + str(self.model.floss_coeff))
-            write_Epoch_summary(self.writer_training, epoch, focalTverskyLoss=total_floss, mipLoss=total_mipLoss,
-                                diceLoss=total_DiceLoss, diceScore=total_DiceScore, iou=total_IOU)
-            self.wandb.log({"focalTverskyLoss_train": total_floss, "mipLoss_train": total_mipLoss, "floss_coeff": round(self.model.floss_coeff.item(), 3)})
+                             "\n focalTverskyLoss:" + str(total_floss) + " mipLoss: " + str(total_mip_loss) + " totalLoss: " + str(total_loss) + " floss_coeff: " + str(self.model.floss_coeff))
+            write_Epoch_summary(self.writer_training, epoch, focalTverskyLoss=total_floss, mipLoss=total_mip_loss, totalLoss=total_loss)
+            self.wandb.log({"focalTverskyLoss_train": total_floss, "mipLoss_train": total_mip_loss, "totalLoss_train": total_loss, "floss_coeff": round(self.model.floss_coeff.item(), 3)})
 
             save_model(self.checkpoint_path, {
                 'epoch_type': 'last',
