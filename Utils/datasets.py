@@ -253,7 +253,7 @@ class SRDataset(Dataset):
         self.data = pd.DataFrame.from_dict(dataDict)
         self.pre_loaded_data = pd.DataFrame.from_dict(
             {'pre_loaded_img': pre_loaded_img, 'pre_loaded_lbl': pre_loaded_lbl,
-             'pre_loaded_lbl_mip': pre_loaded_lbl_mip})
+             'pre_loaded_lbl_mip': pre_loaded_lbl_mip, 'pre_loaded_aug_img': pre_loaded_aug_img, 'pre_loaded_aug_lbl': pre_loaded_aug_lbl, 'pre_loaded_aug_lbl_mip': pre_loaded_aug_lbl_mip})
         self.logger.debug(len(self.data))
 
         if Size is not None and len(self.data) > Size:
