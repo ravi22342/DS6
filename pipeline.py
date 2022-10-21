@@ -228,16 +228,6 @@ class Pipeline:
             total_floss = 0
             total_mipLoss = 0
             total_DiceLoss = 0
-            total_og_floss = 0
-            total_og_mipLoss = 0
-            total_og_DiceLoss = 0
-            # total_IOU = 0
-            # total_DiceScore = 0
-            total_aug_floss = 0
-            total_aug_mipLoss = 0
-            total_aug_DiceLoss = 0
-            # total_aug_IOU = 0
-            # total_aug_DiceScore = 0
             batch_index = 0
             for batch_index, patches_batch in enumerate(tqdm(self.train_loader)):
 
@@ -258,7 +248,7 @@ class Pipeline:
                 # try:
                 with autocast(enabled=self.with_apex):
                     loss_ratios = [1, 0.66, 0.34]  # TODO param
-                    og_floss, aug_floss, og_mip_loss, aug_mip_loss, og_diceLoss_batch, aug_diceLoss_batch, floss, \
+                    og_floss, aug_floss, og_diceLoss_batch, aug_diceLoss_batch, floss, \
                     mip_loss, diceLoss_batch, loss = 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
 
                     # -------------------------------------------------------------------------------------------------
@@ -269,7 +259,7 @@ class Pipeline:
                             if level == 0:
                                 output1 = output
                             if level > 0:  # then the output size is reduced, and hence interpolate to patch_size
-                                output = torch.nn.functional.interpolate(input=output, size=(32, 32, 32))
+                                output = torch.nn.functional.interpolate(input=output, size=(64, 64, 64))
                             output = torch.sigmoid(output)
                             dl_batch, ds_batch = self.dice(output, local_labels)
                             # IOU_score = self.iou(output, local_labels)
@@ -285,7 +275,7 @@ class Pipeline:
                                 mip_loss_patch += loss_ratios[level] * self.mip_loss(op_mip,
                                                   patches_batch['ground_truth_mip_patch'][index].float().cuda())
                             if not torch.any(torch.isnan(mip_loss_patch)):
-                                og_mip_loss += mip_loss_patch / len(output)
+                                mip_loss += mip_loss_patch / len(output)
                             # mip_loss += loss_ratios[level] * self.mip_loss(output, patches_batch, self.pre_loaded_train_lbl_data, self.focalTverskyLoss, self.patch_size)
 
                             level += 1
@@ -293,7 +283,7 @@ class Pipeline:
                         # Calculate error on augmented inputs
                         for aug_output in self.model(aug_batch):
                             if level > 0:  # then the output size is reduced, and hence interpolate to patch_size
-                                aug_output = torch.nn.functional.interpolate(input=aug_output, size=(32, 32, 32))
+                                aug_output = torch.nn.functional.interpolate(input=aug_output, size=(64, 64, 64))
                             aug_output = torch.sigmoid(aug_output)
                             dl_batch, ds_batch = self.dice(aug_output, aug_labels)
                             # IOU_score = self.iou(aug_output, aug_labels)
@@ -301,15 +291,15 @@ class Pipeline:
                             # diceScore_batch += ds_batch.detach().item()
                             # IOU_batch += IOU_score.detach().item()
                             aug_floss += loss_ratios[level] * self.focalTverskyLoss(aug_output, aug_labels)
-                            # Compute MIP loss from the patch on the MIP of the 3D label and the patch prediction
-                            mip_loss_patch = torch.tensor(0.001).float().cuda()
-                            num_patches = 0
-                            for index, op in enumerate(aug_output):
-                                op_mip = torch.amax(op, 1)
-                                mip_loss_patch += loss_ratios[level] * self.mip_loss(op_mip,
-                                                  patches_batch['aug_ground_truth_mip_patch'][index].float().cuda())
-                            if not torch.any(torch.isnan(mip_loss_patch)):
-                                aug_mip_loss += mip_loss_patch / len(aug_output)
+                            # # Compute MIP loss from the patch on the MIP of the 3D label and the patch prediction
+                            # mip_loss_patch = torch.tensor(0.001).float().cuda()
+                            # num_patches = 0
+                            # for index, op in enumerate(aug_output):
+                            #     op_mip = torch.amax(op, 1)
+                            #     mip_loss_patch += loss_ratios[level] * self.mip_loss(op_mip,
+                            #                       patches_batch['aug_ground_truth_mip_patch'][index].float().cuda())
+                            # if not torch.any(torch.isnan(mip_loss_patch)):
+                            #     aug_mip_loss += mip_loss_patch / len(aug_output)
                             # mip_loss += loss_ratios[level] * self.mip_loss(output, patches_batch, self.pre_loaded_train_lbl_data, self.focalTverskyLoss, self.patch_size)
 
                             level += 1
@@ -365,8 +355,8 @@ class Pipeline:
                         floss = floss + floss2 + floss_c
 
                     else:
-                        floss = (og_floss + aug_floss) / 2
-                        mip_loss = (og_mip_loss + aug_mip_loss) / 2
+                        floss = og_floss + aug_floss
+                        # mip_loss = (og_mip_loss + aug_mip_loss)
                         diceLoss_batch = (og_diceLoss_batch + aug_diceLoss_batch) / 2
                         loss = (self.floss_coeff * floss) + (self.mip_loss_coeff * mip_loss)
 
@@ -499,7 +489,7 @@ class Pipeline:
                 local_batch = torch.movedim(local_batch, -1, -3)
                 local_labels = torch.movedim(local_labels, -1, -3)
 
-                og_floss_iter, aug_floss_iter, og_mipLoss_iter, aug_mipLoss_iter = 0, 0, 0, 0
+                og_floss_iter, aug_floss_iter, mipLoss_iter = 0, 0, 0, 0
                 output1, aug_output1 = 0, 0
                 try:
                     with autocast(enabled=self.with_apex):
@@ -522,7 +512,7 @@ class Pipeline:
                                     mip_loss_patch += self.mip_loss(op_mip,
                                                       patches_batch['ground_truth_mip_patch'][idx].float().cuda())
                                 if not torch.any(torch.isnan(mip_loss_patch)):
-                                    og_mipLoss_iter += mip_loss_patch / len(output)
+                                    mipLoss_iter += mip_loss_patch / len(output)
                                 # mipLoss_iter += loss_ratios[level] * self.mip_loss(output, patches_batch, self.pre_loaded_validate_lbl_data, self.focalTverskyLoss, self.patch_size)
                                 og_floss_iter += loss_ratios[level] * self.focalTverskyLoss(output, local_labels)
                                 level += 1
@@ -536,14 +526,14 @@ class Pipeline:
                                     aug_output = torch.nn.functional.interpolate(input=aug_output, size=(64, 64, 64))
                                 aug_output = torch.sigmoid(aug_output)
 
-                                # Compute MIP loss from the patch on the MIP of the 3D label and the patch prediction
-                                mip_loss_patch = torch.tensor(0.001).float().cuda()
-                                for idx, op in enumerate(aug_output):
-                                    op_mip = torch.amax(op, 1)
-                                    mip_loss_patch += self.mip_loss(op_mip,
-                                                      patches_batch['ground_truth_mip_patch'][idx].float().cuda())
-                                if not torch.any(torch.isnan(mip_loss_patch)):
-                                    aug_mipLoss_iter += mip_loss_patch / len(aug_output)
+                                # # Compute MIP loss from the patch on the MIP of the 3D label and the patch prediction
+                                # mip_loss_patch = torch.tensor(0.001).float().cuda()
+                                # for idx, op in enumerate(aug_output):
+                                #     op_mip = torch.amax(op, 1)
+                                #     mip_loss_patch += self.mip_loss(op_mip,
+                                #                       patches_batch['ground_truth_mip_patch'][idx].float().cuda())
+                                # if not torch.any(torch.isnan(mip_loss_patch)):
+                                #     aug_mipLoss_iter += mip_loss_patch / len(aug_output)
                                 # mipLoss_iter += loss_ratios[level] * self.mip_loss(output, patches_batch, self.pre_loaded_validate_lbl_data, self.focalTverskyLoss, self.patch_size)
                                 aug_floss_iter += loss_ratios[level] * self.focalTverskyLoss(aug_output, aug_labels)
                                 level += 1
@@ -557,8 +547,8 @@ class Pipeline:
                 except Exception as error:
                     self.logger.exception(error)
 
-                floss += og_floss_iter + aug_floss_iter # TODO: Can be mean
-                mipLoss += og_mipLoss_iter + aug_mipLoss_iter # TODO: Can be mean
+                floss += og_floss_iter + aug_floss_iter  # TODO: Can be mean
+                mipLoss += mipLoss_iter
                 og_dl, og_ds = self.dice(torch.sigmoid(output1), local_labels)
                 aug_dl, aug_ds = self.dice(torch.sigmoid(aug_output1), aug_labels)
                 dloss += og_dl.detach().item() + aug_dl.detach().item()
