@@ -31,9 +31,7 @@ torch.manual_seed(2020)
 np.random.seed(2020)
 random.seed(2020)
 
-wandb.init(project="DS6_VesselSeg2", entity="ds6_vessel_seg2")
-
-# torch.autograd.set_detect_anomaly(True)
+torch.autograd.set_detect_anomaly(True)
 
 if __name__ == '__main__':
 
@@ -167,6 +165,12 @@ if __name__ == '__main__':
                         type=float,
                         default=0.7,
                         help="Loss coefficient for mip_loss_param_alpha")
+    parser.add_argument("-wandb",
+                        default=True,
+                        help="Set this to true to include wandb logging")
+    parser.add_argument("-elastic_deform",
+                        default=True,
+                        help="Set this to true to include wandb logging")
 
     args = parser.parse_args()
 
@@ -188,18 +192,23 @@ if __name__ == '__main__':
     logger = Logger(MODEL_NAME, LOGGER_PATH).get_logger()
     test_logger = Logger(MODEL_NAME + '_test', LOGGER_PATH).get_logger()
 
-    wandb.config = {
-        "learning_rate": args.learning_rate,
-        "epochs": args.num_epochs,
-        "batch_size": args.batch_size,
-        "patch_size": args.patch_size,
-        "samples_per_epoch": args.samples_per_epoch,
-        "mip_loss_coeff": args.mip_loss_coeff,
-        "floss_coeff": args.floss_coeff
-    }
+    wandb = None
+    if str(args.wandb).lower() == "true":
+        import wandb
+
+        wandb.init(project="DS6_VesselSeg2", entity="ds6_vessel_seg2", notes=args.model_name)
+        wandb.config = {
+            "learning_rate": args.learning_rate,
+            "epochs": args.num_epochs,
+            "batch_size": args.batch_size,
+            "patch_size": args.patch_size,
+            "samples_per_epoch": args.samples_per_epoch,
+            "mip_loss_coeff": args.mip_loss_coeff,
+            "floss_coeff": args.floss_coeff
+        }
 
     # Model
-    model = getModel(args.model, OUTPUT_PATH + "/" + MODEL_NAME)
+    model = torch.nn.DataParallel(getModel(args.model, OUTPUT_PATH + "/" + MODEL_NAME))
     model.cuda()
 
     writer_training = SummaryWriter(TENSORBOARD_PATH_TRAINING)

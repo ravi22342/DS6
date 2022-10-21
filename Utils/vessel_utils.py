@@ -35,7 +35,7 @@ __status__ = "Production"
 def minmax(array):
     return (array - array.min()) / (array.max() - array.min())
 
-def write_summary(writer, logger, index, original=None, reconstructed=None, focalTverskyLoss=0, mipLoss=0, diceLoss=0, diceScore=0, iou=0):
+def write_summary(writer, logger, index, original=None, reconstructed=None, focalTverskyLoss=0, mipLoss=0, totalLoss=0, diceLoss=0, diceScore=0, iou=0):
     """
     Method to write summary to the tensorboard.
     index: global_index for the visualisation
@@ -45,6 +45,7 @@ def write_summary(writer, logger, index, original=None, reconstructed=None, foca
     print('Writing Summary...')
     writer.add_scalar('FocalTverskyLoss', focalTverskyLoss, index)
     writer.add_scalar('MipLoss', mipLoss, index)
+    writer.add_scalar('TotalLoss', totalLoss, index)
     writer.add_scalar('DiceLoss', diceLoss, index)
     writer.add_scalar('DiceScore', diceScore, index)
     writer.add_scalar('IOU', iou, index)
@@ -54,7 +55,7 @@ def write_summary(writer, logger, index, original=None, reconstructed=None, foca
         writer.add_image('reconstructed', reconstructed.cpu().data.numpy()[None,:], index)
         writer.add_image('diff', np.moveaxis(create_diff_mask(reconstructed,original,logger), -1, 0), index) #create_diff_mask is of the format HXWXC, but CXHXW is needed
 
-def write_Epoch_summary(writer, index, focalTverskyLoss=0, mipLoss=0, diceLoss=0, diceScore=0, iou=0):
+def write_Epoch_summary(writer, index, focalTverskyLoss=0, mipLoss=0, totalLoss=0, diceLoss=0, diceScore=0, iou=0):
     """
     Method to write summary to the tensorboard.
     index: global_index for the visualisation
@@ -63,6 +64,7 @@ def write_Epoch_summary(writer, index, focalTverskyLoss=0, mipLoss=0, diceLoss=0
     print('Writing Epoch Summary...')
     writer.add_scalar('FocalTverskyLoss (Per Epoch)', focalTverskyLoss, index)
     writer.add_scalar('MipLoss (Per Epoch)', mipLoss, index)
+    writer.add_scalar('TotalLoss (Per Epoch)', totalLoss, index)
     writer.add_scalar('DiceLoss (Per Epoch)', diceLoss, index)
     writer.add_scalar('DiceScore (Per Epoch)', diceScore, index)
     writer.add_scalar('IOU (Per Epoch)', iou, index)  

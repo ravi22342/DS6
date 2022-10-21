@@ -4,7 +4,7 @@
 import glob
 import os
 import sys
-from random import randint, random, seed
+from random import randint, random, seed, uniform, choices, choice
 
 import nibabel
 import numpy as np
@@ -17,6 +17,7 @@ import torchvision.transforms as transforms
 from torch.utils.data import Dataset
 import torchio as tio
 from PIL import Image
+from Utils.elastic_transform import RandomElasticDeformation, warp_image
 
 from Utils.customutils import createCenterRatioMask, performUndersampling
 
@@ -38,7 +39,7 @@ class SRDataset(Dataset):
 
     def __init__(self, logger, patch_size, dir_path, label_dir_path, stride_depth=16, stride_length=32, stride_width=32,
                  Size=None, fly_under_percent=None, patch_size_us=None, return_coords=False, pad_patch=True,
-                 pre_interpolate=None, norm_data=True, pre_load=False):
+                 pre_interpolate=None, norm_data=True, pre_load=False, elastic_deform=False):
         self.patch_size = patch_size  # -1 = full vol
         self.stride_depth = stride_depth
         self.stride_length = stride_length
@@ -62,14 +63,21 @@ class SRDataset(Dataset):
             patch_size_us = None
         self.patch_size_us = patch_size_us  # If already downsampled data is supplied, then this can be used. Calculate already based on the downsampling size.
         self.norm_data = norm_data
+        self.elastic_deform = elastic_deform
         self.pre_load = pre_load
         self.pre_loaded_data = pd.DataFrame(columns=["pre_loaded_img", "pre_loaded_lbl", "pre_loaded_lbl_mip"])
         pre_loaded_lbl = np.empty([1], dtype=object)
         pre_loaded_img = np.empty([1], dtype=object)
+        pre_loaded_aug_img = np.empty([1], dtype=object)
+        pre_loaded_aug_lbl = np.empty([1], dtype=object)
         pre_loaded_lbl_mip = np.empty([1], dtype=object)
+        pre_loaded_aug_lbl_mip = np.empty([1], dtype=object)
         pre_loaded_lbl = np.delete(pre_loaded_lbl, 0)
         pre_loaded_img = np.delete(pre_loaded_img, 0)
         pre_loaded_lbl_mip = np.delete(pre_loaded_lbl_mip, 0)
+        pre_loaded_aug_img = np.delete(pre_loaded_aug_img, 0)
+        pre_loaded_aug_lbl = np.delete(pre_loaded_aug_lbl, 0)
+        pre_loaded_aug_lbl_mip = np.delete(pre_loaded_aug_lbl_mip, 0)
 
         if not self.norm_data:
             print("No Norm")  # TODO remove
@@ -150,7 +158,16 @@ class SRDataset(Dataset):
                 pre_loaded_lbl = np.append(pre_loaded_lbl,
                                            {'subjectname': labelFileName, 'data': labelFile.data})
                 pre_loaded_lbl_mip = np.append(pre_loaded_lbl_mip,
-                                                {'subjectname': label_filename_trimmed, 'data': labelFile_mip})
+                                               {'subjectname': label_filename_trimmed, 'data': labelFile_mip})
+                pre_loaded_aug_img = np.append(pre_loaded_aug_img,
+                                           {'subjectname': imageFileName, 'data': SRDataset.get_transformed_image(imageFile.data, self.elastic_deform)})
+                aug_lbl = SRDataset.get_transformed_image(labelFile.data, self.elastic_deform)
+                pre_loaded_aug_lbl = np.append(pre_loaded_aug_lbl,
+                                               {'subjectname': labelFileName,
+                                                'data': aug_lbl})
+                pre_loaded_aug_lbl_mip = np.append(pre_loaded_aug_lbl_mip,
+                                               {'subjectname': label_filename_trimmed,
+                                                'data': torch.amax(aug_lbl.squeeze(), -1)})
 
             if patch_size != 1 and (n_depth < patch_size or n_length < patch_size or n_width < patch_size):
                 self.logger.debug(
@@ -246,6 +263,50 @@ class SRDataset(Dataset):
         if patch_size != -1 and fly_under_percent is not None:
             self.mask = createCenterRatioMask(np.zeros((patch_size, patch_size, patch_size)), fly_under_percent)
 
+    @staticmethod
+    def get_transformed_image(img, elastic_deform=False):
+        # def get_max_displacement(img, control_points):
+        #     image = img.as_sitk()
+        #     bounds = np.array(image.GetSize()) * np.array(image.GetSpacing())
+        #     num_control_points = np.array(control_points)
+        #     grid_spacing = bounds / (num_control_points - 2)
+        #     potential_folding = grid_spacing / 2
+        #
+        #     min_displacement = [30., 40., 10.18]  # min displacement when num_of_control_points = 10
+        #     displacement_points = ()
+        #
+        #     for min_displacement, max_displacement in zip(min_displacement, potential_folding):
+        #         pt = round(uniform(min_displacement, max_displacement), 2)
+        #         displacement_points += (pt,)
+        #     return displacement_points
+
+        # num_of_control_points = tuple(randint(5, 10) for _ in range(3))
+        # transforms = tio.Compose([
+        #     tio.RandomFlip(axes=('LR',),
+        #                    flip_probability=0.75,
+        #                    exclude=["img", "label"]),
+        #     tio.RandomElasticDeformation(num_control_points=num_of_control_points, locked_borders=2,
+        #                                  max_displacement=get_max_displacement(img, num_of_control_points),
+        #                                  exclude=["img", "label"])
+        # ])
+        elastic = RandomElasticDeformation(
+            num_control_points=choice([5, 6, 7]),
+            max_displacement=choice([0.01, 0.015, 0.02, 0.025, 0.03]),
+            locked_borders=2
+        )
+        elastic.cuda()
+        transforms = tio.Compose([
+            tio.RandomFlip(axes=('LR',),
+                           flip_probability=0.75,
+                           exclude=["img", "label"])
+        ])
+        img = transforms(img)
+        if elastic_deform:
+            if len(img.shape) == 4:
+                img = torch.reshape(img, (1, img.shape[0], img.shape[1], img.shape[2], img.shape[3])).float().cuda()
+            img = elastic(img)
+        return img
+
     def __len__(self):
         return len(self.data)
 
@@ -272,9 +333,12 @@ class SRDataset(Dataset):
             groundTruthImages = [lbl for lbl in self.pre_loaded_data['pre_loaded_lbl'] if
                                  lbl['subjectname'] == self.data.iloc[index, 3]]
             groundTruthImages = groundTruthImages[0]['data']
+            aug_groundTruthImages = [lbl for lbl in self.pre_loaded_data['pre_loaded_aug_lbl'] if
+                                 lbl['subjectname'] == self.data.iloc[index, 3]][0]['data']
         else:
             groundTruthImages = tio.LabelMap(self.data.iloc[index, 3])  # TODO: Update this to tio.ScalarImage
             groundTruthImages = groundTruthImages.data
+            aug_groundTruthImages = SRDataset.get_transformed_image(groundTruthImages, self.elastic_deform)
 
         startIndex_depth = self.data.iloc[index, 6]
         startIndex_length = self.data.iloc[index, 7]
@@ -292,15 +356,24 @@ class SRDataset(Dataset):
                 targetPatch = groundTruthImages[:, startIndex_width:startIndex_width + self.patch_size,
                               startIndex_length:startIndex_length + self.patch_size,
                               startIndex_depth:startIndex_depth + self.patch_size]  # .squeeze()
+                aug_targetPatch = aug_groundTruthImages[:, startIndex_width:startIndex_width + self.patch_size,
+                                  startIndex_length:startIndex_length + self.patch_size,
+                                  startIndex_depth:startIndex_depth + self.patch_size]
             else:
                 targetPatch = groundTruthImages[startIndex_width:startIndex_width + self.patch_size,
                               startIndex_length:startIndex_length + self.patch_size,
                               startIndex_depth:startIndex_depth + self.patch_size]  # .squeeze()
+                aug_targetPatch = aug_groundTruthImages[startIndex_width:startIndex_width + self.patch_size,
+                                  startIndex_length:startIndex_length + self.patch_size,
+                                  startIndex_depth:startIndex_depth + self.patch_size]
+
         else:
             if len(groundTruthImages.shape) == 4:  # don't know why, but an additional dim is noticed in some of the fully-sampled NIFTIs
                 targetPatch = groundTruthImages[:, :, :, :]  # .squeeze()
+                aug_targetPatch = aug_groundTruthImages[:, :, :, :]
             else:
                 targetPatch = groundTruthImages[...]  # .squeeze()
+                aug_targetPatch = aug_groundTruthImages[...]  # .squeeze()
 
         if self.fly_under_percent is not None:
             if self.patch_size != -1:
@@ -310,26 +383,37 @@ class SRDataset(Dataset):
                 mask = createCenterRatioMask(targetPatch, self.fly_under_percent)
                 patch = abs(performUndersampling(np.array(targetPatch).copy(), mask=mask, zeropad=False))
                 patch = patch[..., ::2]  # 2 for 25% - harcoded. TODO fix it
+                aug_patch = patch
         else:
             if self.pre_load:
                 image_us = [img for img in self.pre_loaded_data['pre_loaded_img'] if
                             img['subjectname'] == self.data.iloc[index, 0]]
                 image_us = image_us[0]['data']
+                aug_image_us = [img for img in self.pre_loaded_data['pre_loaded_aug_img'] if
+                            img['subjectname'] == self.data.iloc[index, 0]][0]['data']
             else:
                 image_us = tio.ScalarImage(self.data.iloc[index, 0])  # TODO change this to use tio.ScalarImage
+                aug_image_us = SRDataset.get_transformed_image(image_us, self.elastic_deform)
 
             # images = nibabel.load(self.data.iloc[index, 0])
             if self.patch_size_us is not None:
                 patch = image_us[:, startIndex_width_us:startIndex_width_us + self.patch_size_us,
                         startIndex_length_us:startIndex_length_us + self.patch_size_us,
                         startIndex_depth_us:startIndex_depth_us + self.patch_size]  # .squeeze()
+                aug_patch = aug_image_us[:, startIndex_width_us:startIndex_width_us + self.patch_size_us,
+                            startIndex_length_us:startIndex_length_us + self.patch_size_us,
+                            startIndex_depth_us:startIndex_depth_us + self.patch_size]
             else:
                 if self.patch_size != -1 and self.pre_interpolate is None:
                     patch = image_us[:, startIndex_width:startIndex_width + self.patch_size,
                             startIndex_length:startIndex_length + self.patch_size,
                             startIndex_depth:startIndex_depth + self.patch_size]  # .squeeze()
+                    aug_patch = aug_image_us[:, startIndex_width:startIndex_width + self.patch_size,
+                                startIndex_length:startIndex_length + self.patch_size,
+                                startIndex_depth:startIndex_depth + self.patch_size]
                 else:
                     patch = image_us[...]
+                    aug_patch = aug_image_us[...]
 
         # target_slices = np.array(target_voxel).astype(
         #     np.float32)  # get slices in range, convert to array, change axis of depth (because nibabel gives LXWXD, but we need in DXLXW) TODO Now it is WXLXD
@@ -344,13 +428,16 @@ class SRDataset(Dataset):
             patch = patch[startIndex_width:startIndex_width + self.patch_size,
                     startIndex_length:startIndex_length + self.patch_size,
                     startIndex_depth:startIndex_depth + self.patch_size]
+            aug_patch = patch
         if self.norm_data:
             patch = patch / imageFile_max  # normalisation
+            aug_patch = aug_patch / aug_patch.max()  # normalisation
+            targetPatch = targetPatch / labelFile_max
+            aug_targetPatch = aug_targetPatch / aug_targetPatch.max()
 
+        # if self.norm_data:
         # targetPatch = torch.from_numpy(target_voxel)
         # targetPatch = targetPatch/torch.max(targetPatch)
-        if self.norm_data:
-            targetPatch = targetPatch / labelFile_max
 
         # to deal the patches which has smaller size
         if self.pad_patch:
@@ -376,28 +463,40 @@ class SRDataset(Dataset):
                     pad_us += pad_dim
             patch = F.pad(patch, pad_us[:6], value=np.finfo(
                 np.float).eps)  # tuple has to be reveresed before using it for padding. As the tuple contains in DHW manner, and input is needed as WHD mannger TODO input already in WXLXD
+            aug_patch = F.pad(aug_patch, pad_us[:6], value=np.finfo(np.float).eps)
             targetPatch = F.pad(targetPatch, pad[:6], value=np.finfo(np.float).eps)
+            aug_targetPatch = F.pad(aug_targetPatch, pad[:6], value=np.finfo(np.float).eps)
 
         if self.return_coords is True:
             trimmed_label_filename = (self.data.iloc[index, 3]).split("\\")
             trimmed_label_filename = trimmed_label_filename[len(trimmed_label_filename) - 1]
             ground_truth_mip = [lbl for lbl in self.pre_loaded_data['pre_loaded_lbl_mip'] if
-                                 lbl['subjectname'] == trimmed_label_filename][0]['data']
+                                lbl['subjectname'] == trimmed_label_filename][0]['data']
             ground_truth_mip_patch = ground_truth_mip[startIndex_width:startIndex_width + self.patch_size,
                                      startIndex_length:startIndex_length + self.patch_size]
+            aug_ground_truth_mip = [lbl for lbl in self.pre_loaded_data['pre_loaded_aug_lbl_mip'] if
+                                lbl['subjectname'] == trimmed_label_filename][0]['data']
+            aug_ground_truth_mip_patch = aug_ground_truth_mip[startIndex_width:startIndex_width + self.patch_size,
+                                         startIndex_length:startIndex_length + self.patch_size]
             pad = ()
             for dim in range(len(ground_truth_mip_patch.shape)):
                 target_shape = ground_truth_mip_patch.shape[::-1]
                 pad_needed = self.patch_size - target_shape[dim]
                 pad_dim = (pad_needed // 2, pad_needed - (pad_needed // 2))
                 pad += pad_dim
-            ground_truth_mip_patch = torch.nn.functional.pad(ground_truth_mip_patch, pad[:6], value=np.finfo(np.float).eps)
+            ground_truth_mip_patch = torch.nn.functional.pad(ground_truth_mip_patch, pad[:6],
+                                                             value=np.finfo(np.float).eps)
+            aug_ground_truth_mip_patch = torch.nn.functional.pad(aug_ground_truth_mip_patch, pad[:6],
+                                                                 value=np.finfo(np.float).eps)
 
             subject = tio.Subject(
                 img=tio.ScalarImage(tensor=patch),
                 label=tio.LabelMap(tensor=targetPatch),
+                aug_img=tio.ScalarImage(tensor=aug_patch),
+                aug_label=tio.ScalarImage(tensor=aug_targetPatch),
                 subjectname=trimmed_label_filename.split(".")[0],
                 ground_truth_mip_patch=ground_truth_mip_patch,
+                aug_ground_truth_mip_patch=aug_ground_truth_mip_patch,
                 start_coords=start_coords
             )
             return subject
