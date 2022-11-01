@@ -421,7 +421,8 @@ class Pipeline:
                 total_IOU) + " mipLoss: " + str(total_mipLoss) + " totalLoss: " + str(total_loss))
             write_Epoch_summary(self.writer_training, epoch, focalTverskyLoss=total_floss, mipLoss=total_mipLoss, totalLoss=total_loss,
                                 diceLoss=total_DiceLoss, diceScore=total_DiceScore, iou=total_IOU)
-            self.wandb.log({"focalTverskyLoss_train": total_floss, "mipLoss_train": total_mipLoss, "totalLoss_train": total_loss})
+            if self.wandb is not None:
+                self.wandb.log({"focalTverskyLoss_train": total_floss, "mipLoss_train": total_mipLoss, "totalLoss_train": total_loss})
 
             save_model(self.checkpoint_path, {
                 'epoch_type': 'last',
@@ -528,7 +529,8 @@ class Pipeline:
                       0, 0)
 
         write_Epoch_summary(writer, epoch, focalTverskyLoss=floss, mipLoss=mipLoss, totalLoss=loss, diceLoss=dloss, diceScore=0, iou=0)
-        self.wandb.log({"focalTverskyLoss_val": floss, "mipLoss_val": mipLoss, "totalLoss_val": loss})
+        if self.wandb is not None:
+            self.wandb.log({"focalTverskyLoss_val": floss, "mipLoss_val": mipLoss, "totalLoss_val": loss})
 
         if self.LOWEST_LOSS > loss:  # Save best metric evaluation weights
             self.LOWEST_LOSS = loss
@@ -820,8 +822,11 @@ class Pipeline:
                         save_tifRGB(overlay, os.path.join(result_root, subjectname + "_colour.tif"))
 
                         overlayMIP = create_diff_mask_binary(resultMIP, np.max(label, axis=-1))
-                        Image.fromarray(overlayMIP.astype('uint8'), 'RGB').save(
+                        color_mip = Image.fromarray(overlayMIP.astype('uint8'), 'RGB')
+                        color_mip.save(
                             os.path.join(result_root, subjectname + "_colourMIP.tif"))
+                        if self.wandb is not None:
+                            self.wandb.log({"" + subjectname: self.wandb.Image(color_mip)})
 
                 test_logger.info("Testing " + subjectname + "..." +
                                  "\n Dice:" + str(dice3D) +
