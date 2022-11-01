@@ -224,6 +224,7 @@ class Pipeline:
             self.model.train()  # make sure to assign mode:train, because in validation, mode is assigned as eval
             total_floss = 0
             total_mipLoss = 0
+            total_loss = 0
             total_DiceLoss = 0
             total_IOU = 0
             total_DiceScore = 0
@@ -332,9 +333,10 @@ class Pipeline:
                         # -------------------------------------------------------------------------------------------
                         # Total loss
                         floss = floss + floss2 + floss_c
+                        loss = floss
 
                     else:
-                        floss = (self.floss_coeff * floss) + (self.mip_loss_coeff * mip_loss)
+                        loss = (self.floss_coeff * floss) + (self.mip_loss_coeff * mip_loss)
 
 
 
@@ -345,19 +347,19 @@ class Pipeline:
                 self.logger.info("Epoch:" + str(epoch) + " Batch_Index:" + str(batch_index) + " Training..." +
                                  "\n focalTverskyLoss: " + str(floss) + " diceLoss: " + str(
                     diceLoss_batch) + " diceScore: " + str(diceScore_batch) + " iou: " + str(
-                    IOU_batch) + " mipLoss: " + str(mip_loss))
+                    IOU_batch) + " mipLoss: " + str(mip_loss) + " totalLoss: " + str(loss))
 
                 # Calculating gradients
                 if self.with_apex:
-                    if type(floss) is list:
-                        for i in range(len(floss)):
-                            if i + 1 == len(floss):  # final loss
-                                self.scaler.scale(floss[i]).backward()
+                    if type(loss) is list:
+                        for i in range(len(loss)):
+                            if i + 1 == len(loss):  # final loss
+                                self.scaler.scale(loss[i]).backward()
                             else:
-                                self.scaler.scale(floss[i]).backward(retain_graph=True)
-                        floss = torch.sum(torch.stack(floss))
+                                self.scaler.scale(loss[i]).backward(retain_graph=True)
+                        floss = torch.sum(torch.stack(loss))
                     else:
-                        self.scaler.scale(floss).backward()
+                        self.scaler.scale(loss).backward()
 
                     if self.clip_grads:
                         self.scaler.unscale_(self.optimizer)
@@ -367,10 +369,10 @@ class Pipeline:
                     self.scaler.step(self.optimizer)
                     self.scaler.update()
                 else:
-                    if not torch.any(torch.isnan(floss)):
-                        floss.backward()
+                    if not torch.any(torch.isnan(loss)):
+                        loss.backward()
                     else:
-                        self.logger.info("nan found in floss.... no backpropagation!!")
+                        self.logger.info("nan found in loss.... no backpropagation!!")
                     if self.clip_grads:
                         torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1)
                         # torch.nn.utils.clip_grad_value_(self.model.parameters(), 1)
@@ -379,12 +381,13 @@ class Pipeline:
 
                 if training_batch_index % 50 == 0:  # Save best metric evaluation weights
                     write_summary(self.writer_training, self.logger, training_batch_index,
-                                  focalTverskyLoss=floss.detach().item(), mipLoss=mip_loss.detach().item(),
+                                  focalTverskyLoss=floss.detach().item(), mipLoss=mip_loss.detach().item(), totalLoss=loss.detach.item(),
                                   diceLoss=diceLoss_batch, diceScore=diceScore_batch, iou=IOU_batch)
                 training_batch_index += 1
 
                 # Initialising the average loss metrics
                 total_floss += floss.detach().item()
+                total_loss += loss.detach().item()
                 # Compute total DiceLoss, DiceScore and IOU per batch
                 if (num_patches > 0):
                     diceLoss_batch = diceLoss_batch / num_patches
@@ -404,6 +407,7 @@ class Pipeline:
             # Calculate the average loss per batch in one epoch
             total_floss /= (batch_index + 1.0)
             total_mipLoss /= (batch_index + 1.0)
+            total_loss /= (batch_index + 1.0)
 
             # Calculate the average DiceLoss, DiceScore and IOU per epoch
             total_DiceLoss /= (batch_index + 1.0)
@@ -414,10 +418,10 @@ class Pipeline:
             self.logger.info("Epoch:" + str(epoch) + " Average Training..." +
                              "\n focalTverskyLoss:" + str(total_floss) + " diceLoss: " + str(
                 total_DiceLoss) + " diceScore: " + str(total_DiceScore) + " iou: " + str(
-                total_IOU) + " mipLoss: " + str(total_mipLoss))
-            write_Epoch_summary(self.writer_training, epoch, focalTverskyLoss=total_floss, mipLoss=total_mipLoss,
+                total_IOU) + " mipLoss: " + str(total_mipLoss) + " totalLoss: " + str(total_loss))
+            write_Epoch_summary(self.writer_training, epoch, focalTverskyLoss=total_floss, mipLoss=total_mipLoss, totalLoss=total_loss,
                                 diceLoss=total_DiceLoss, diceScore=total_DiceScore, iou=total_IOU)
-            self.wandb.log({"focalTverskyLoss_train": total_floss, "mipLoss_train": total_mipLoss})
+            self.wandb.log({"focalTverskyLoss_train": total_floss, "mipLoss_train": total_mipLoss, "totalLoss_train": total_loss})
 
             save_model(self.checkpoint_path, {
                 'epoch_type': 'last',
@@ -443,7 +447,7 @@ class Pipeline:
         self.logger.debug('Validating...')
         print("Validate Epoch: " + str(epoch) + " of " + str(self.num_epochs))
 
-        floss, mipLoss, binloss, dloss, dscore, jaccard_index = 0, 0, 0, 0, 0, 0
+        floss, mipLoss, loss, binloss, dloss, dscore, jaccard_index = 0, 0, 0, 0, 0, 0, 0
         no_patches = 0
         self.model.eval()
         data_loader = self.validate_loader
@@ -499,32 +503,35 @@ class Pipeline:
 
                 floss += floss_iter
                 mipLoss += mipLoss_iter
+                loss = (self.floss_coeff * floss) + (self.mip_loss_coeff * mipLoss)
                 dl, ds = self.dice(torch.sigmoid(output1), local_labels)
                 dloss += dl.detach().item()
 
                 # Log validation losses
                 self.logger.info("Batch_Index:" + str(index) + " Validation..." +
                                  "\n focalTverskyLoss:" + str(floss) + "\n DiceLoss: " + str(
-                    dloss) + "\n MipLoss: " + str(mipLoss))
+                    dloss) + "\n MipLoss: " + str(mipLoss) + "\n TotalLoss: " + str(loss))
 
         # Average the losses
         floss = floss / no_patches
         mipLoss = mipLoss / no_patches
+        loss = loss / no_patches
         dloss = dloss / no_patches
         process = ' Validating'
         self.logger.info("Epoch:" + str(tainingIndex) + process + "..." +
                          "\n FocalTverskyLoss:" + str(floss) +
                          "\n DiceLoss:" + str(dloss) +
-                         "\n MipLoss:" + str(mipLoss))
+                         "\n MipLoss:" + str(mipLoss) +
+                         "\n TotalLoss:" + str(loss))
 
-        write_summary(writer, self.logger, tainingIndex, local_labels[0][0][6], output1[0][0][6], floss, mipLoss, dloss,
+        write_summary(writer, self.logger, tainingIndex, local_labels[0][0][6], output1[0][0][6], floss, mipLoss, loss, dloss,
                       0, 0)
 
-        write_Epoch_summary(writer, epoch, focalTverskyLoss=floss, mipLoss=mipLoss, diceLoss=dloss, diceScore=0, iou=0)
-        self.wandb.log({"focalTverskyLoss_val": floss, "mipLoss_val": mipLoss})
+        write_Epoch_summary(writer, epoch, focalTverskyLoss=floss, mipLoss=mipLoss, totalLoss=loss, diceLoss=dloss, diceScore=0, iou=0)
+        self.wandb.log({"focalTverskyLoss_val": floss, "mipLoss_val": mipLoss, "totalLoss_val": loss})
 
-        if self.LOWEST_LOSS > floss:  # Save best metric evaluation weights
-            self.LOWEST_LOSS = floss
+        if self.LOWEST_LOSS > loss:  # Save best metric evaluation weights
+            self.LOWEST_LOSS = loss
             self.logger.info(
                 'Best metric... @ epoch:' + str(tainingIndex) + ' Current Lowest loss:' + str(self.LOWEST_LOSS))
 
