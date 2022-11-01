@@ -40,9 +40,10 @@ __status__ = "Production"
 class Pipeline:
 
     def __init__(self, cmd_args, model, logger, dir_path, checkpoint_path, writer_training, writer_validating,
-                 training_set=None, validation_set=None, test_set=None):
+                 training_set=None, validation_set=None, test_set=None, wandb=None):
 
         self.logger = logger
+        self.wandb = wandb
         self.model = model
         self.lr_1 = cmd_args.learning_rate
         self.logger.info("learning rate " + str(self.lr_1))
@@ -100,7 +101,7 @@ class Pipeline:
                                                      crossvalidation_set=validation_set, is_train=False)
 
             self.train_loader = torch.utils.data.DataLoader(traindataset, batch_size=self.batch_size, shuffle=True,
-                                                            num_workers=self.num_worker)
+                                                            num_workers=0)
             self.validate_loader = torch.utils.data.DataLoader(validationdataset, batch_size=self.batch_size,
                                                                shuffle=False,
                                                                num_workers=self.num_worker)
@@ -132,7 +133,7 @@ class Pipeline:
                 max_length=(self.samples_per_epoch // len(subjects)) * 2,
                 samples_per_volume=self.samples_per_epoch // len(subjects),
                 sampler=sampler,
-                num_workers=0,
+                num_workers=self.num_worker,
                 start_background=True
             )
             return patches_queue
@@ -338,7 +339,8 @@ class Pipeline:
             self.logger.info("Epoch:" + str(epoch) + " Average Training..." +
                              "\n focalTverskyLoss:" + str(total_floss) + " diceLoss: " + str(total_DiceLoss) + " diceScore: " + str(total_DiceScore) + " iou: " + str(total_IOU))
             write_Epoch_summary(self.writer_training, epoch, focalTverskyLoss=total_floss, diceLoss = total_DiceLoss, diceScore = total_DiceScore, iou = total_IOU)
-
+            if self.wandb is not None:
+                self.wandb.log({"focalTverskyLoss_train": total_floss, "diceLoss_train": total_DiceLoss})
             save_model(self.checkpoint_path, {
                 'epoch_type': 'last',
                 'epoch': epoch,
@@ -426,7 +428,9 @@ class Pipeline:
         write_summary(writer, self.logger, tainingIndex, local_labels[0][0][6], output1[0][0][6], floss, dloss, 0, 0)
         
         write_Epoch_summary(writer, epoch, focalTverskyLoss=floss, diceLoss = dloss, diceScore = 0, iou = 0)
-
+        if self.wandb is not None:
+            self.wandb.log({"focalTverskyLoss_val": floss,
+                            "diceLoss_val": dloss, "epoch": epoch})
         if self.LOWEST_LOSS > floss:  # Save best metric evaluation weights
             self.LOWEST_LOSS = floss
             self.logger.info(
@@ -525,8 +529,11 @@ class Pipeline:
                         save_tifRGB(overlay, os.path.join(result_root, subjectname + "_colour.tif"))
 
                         overlayMIP = create_diff_mask_binary(resultMIP, np.max(label, axis=-1))
-                        Image.fromarray(overlayMIP.astype('uint8'), 'RGB').save(
+                        color_mip = Image.fromarray(overlayMIP.astype('uint8'), 'RGB')
+                        color_mip.save(
                             os.path.join(result_root, subjectname + "_colourMIP.tif"))
+                        if self.wandb is not None:
+                            self.wandb.log({"" + subjectname: self.wandb.Image(color_mip)})
 
                 test_logger.info("Testing " + subjectname + "..." +
                                  "\n Dice:" + str(dice3D) +

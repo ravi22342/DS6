@@ -126,6 +126,9 @@ if __name__ == '__main__':
                         type=int,
                         default=8,
                         help="Number of worker threads")
+    parser.add_argument("-wandb",
+                        default=True,
+                        help="Set this to true to include wandb logging")
 
     args = parser.parse_args()
 
@@ -147,8 +150,23 @@ if __name__ == '__main__':
     logger = Logger(MODEL_NAME, LOGGER_PATH).get_logger()
     test_logger = Logger(MODEL_NAME + '_test', LOGGER_PATH).get_logger()
 
+    wandb = None
+    if str(args.wandb).lower() == "true":
+        import wandb
+
+        wandb.init(project="DS6_VesselSeg2", entity="ds6_vessel_seg2", notes=args.model_name)
+        wandb.config = {
+            "learning_rate": args.learning_rate,
+            "epochs": args.num_epochs,
+            "batch_size": args.batch_size,
+            "patch_size": args.patch_size,
+            "samples_per_epoch": args.samples_per_epoch,
+            "mip_loss_coeff": args.mip_loss_coeff,
+            "floss_coeff": args.floss_coeff
+        }
+
     # Model
-    model = getModel(args.model)
+    model = torch.nn.DataParallel(getModel(args.model))
     model.cuda()
 
     writer_training = SummaryWriter(TENSORBOARD_PATH_TRAINING)
@@ -156,7 +174,7 @@ if __name__ == '__main__':
 
     pipeline = Pipeline(cmd_args=args, model=model, logger=logger,
                         dir_path=DATASET_FOLDER, checkpoint_path=CHECKPOINT_PATH, 
-                        writer_training=writer_training, writer_validating=writer_validating)
+                        writer_training=writer_training, writer_validating=writer_validating, wandb=wandb)
 
     # loading existing checkpoint if supplied
     if bool(LOAD_PATH):
