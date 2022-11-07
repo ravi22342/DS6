@@ -381,7 +381,7 @@ class Pipeline:
 
                 if training_batch_index % 50 == 0:  # Save best metric evaluation weights
                     write_summary(self.writer_training, self.logger, training_batch_index,
-                                  focalTverskyLoss=floss.detach().item(), mipLoss=mip_loss.detach().item(), totalLoss=loss.detach.item(),
+                                  focalTverskyLoss=floss.detach().item(), mipLoss=mip_loss.detach().item(), totalLoss=loss.detach().item(),
                                   diceLoss=diceLoss_batch, diceScore=diceScore_batch, iou=IOU_batch)
                 training_batch_index += 1
 
