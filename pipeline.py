@@ -237,6 +237,16 @@ class Pipeline:
                 local_batch = torch.movedim(local_batch, -1, -3)
                 local_labels = torch.movedim(local_labels, -1, -3)
 
+                img_list_2 = []
+                img_list_3 = []
+                for img in local_labels:
+                    print("img2",torch.amax(img,2).shape)
+                    print("img3",torch.amax(img,3).shape)
+                    img_list_2.append(torch.amax(img,2)) # (1,..)
+                    img_list_3.append(torch.amax(img,3)) # (1,..)
+                local_labels_mip_axis_2 = torch.stack(img_list_2,dim=0)
+                local_labels_mip_axis_3 = torch.stack(img_list_3,dim=0)
+
                 # Transfer to GPU
                 self.logger.debug('Epoch: {} Batch Index: {}'.format(epoch, batch_index))
 
@@ -275,9 +285,15 @@ class Pipeline:
                             mip_loss_patch = torch.tensor(0.001).float().cuda()
                             num_patches = 0
                             for index, op in enumerate(output):
-                                op_mip = torch.amax(op, 1)
+                                op_mip = torch.amax(op, 1)  # no 163
+                                op_mip_2 = torch.amax(op, 2) # no 480
+                                op_mip_3 = torch.amax(op, 3) # no 640
                                 mip_loss_patch += loss_ratios[level] * self.mip_loss(op_mip,
                                                   patches_batch['ground_truth_mip_patch'][index].float().cuda())
+                                mip_loss_patch += loss_ratios[level] * self.mip_loss(op_mip_2,
+                                                                                     local_labels_mip_axis_2)
+                                mip_loss_patch += loss_ratios[level] * self.mip_loss(op_mip_3,
+                                                                                     local_labels_mip_axis_3)
                             if not torch.any(torch.isnan(mip_loss_patch)):
                                 mip_loss += mip_loss_patch / len(output)
                             # mip_loss += loss_ratios[level] * self.mip_loss(output, patches_batch, self.pre_loaded_train_lbl_data, self.focalTverskyLoss, self.patch_size)

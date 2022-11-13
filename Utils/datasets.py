@@ -404,19 +404,26 @@ class SRDataset(Dataset):
         else:
             return patch, targetPatch
 
-# DATASET_FOLDER = "/nfs1/schatter/Chimp/data_3D_sr/"
-# DATASET_FOLDER = r"S:\MEMoRIAL_SharedStorage_M1.2+4+7\Data\Skyra\unet_3D_sr"
+# dir_path = r"D:\Deep_Learning\data\trainv1"
+# label_path = r"D:\Deep_Learning\data\train_label"
 # US_Folder = 'Center25Mask'
-# patch_size=64
-
+# patch_size=1
+#
 # import logging
 # logger = logging.getLogger('x')
-# traindataset = SRDataset(logger, patch_size, DATASET_FOLDER + '/usVal/' + US_Folder + '/', DATASET_FOLDER + '/hrVal/', stride_depth =64,
-#                                    stride_length=64, stride_width=64,Size =10, patch_size_us=None, return_coords=True)
-
+# traindataset = SRDataset(logger, patch_size, dir_path +'/', label_path+'/',Size =10, pre_load=True,
+#                          patch_size_us=None, return_coords=True)
+#
 # train_loader = torch.utils.data.DataLoader(traindataset, batch_size=8, shuffle=True)
-
+#
 # for epoch in range(3):
-
-#    for batch_index, (local_batch, local_labels) in enumerate(train_loader):
-#        self.logger.debug(str(epoch) + "  "+ str(batch_index))
+#
+#    for batch_index, patches_batch in enumerate(train_loader):
+#        print(str(epoch) + "  "+ str(batch_index))
+#        local_labels = patches_batch['label'][tio.DATA].float().cuda()
+#        print("before",local_labels.shape)
+#
+#        local_labels = torch.movedim(local_labels, -1, -3)
+#        print("after",local_labels.shape)
+#    break
+#
