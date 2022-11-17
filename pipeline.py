@@ -49,6 +49,8 @@ class Pipeline:
         self.logger.info("learning rate " + str(self.lr_1))
         self.optimizer = torch.optim.Adam(model.parameters(), lr=cmd_args.learning_rate)
         self.num_epochs = cmd_args.num_epochs
+        self.k_folds = cmd_args.k_folds
+        self.learning_rate = cmd_args.learning_rate
 
         self.writer_training = writer_training
         self.writer_validating = writer_validating
@@ -169,6 +171,15 @@ class Pipeline:
         else:
             self.model, self.optimizer = load_model(self.model, self.optimizer, checkpoint_path,
                                                     batch_index="best" if load_best else "last", fold_index=fold_index)
+
+    def reset(self):
+        del self.model
+        self.model = torch.nn.DataParallel(getModel(self.model_type))
+        self.model.cuda()
+        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=self.learning_rate)
+        if self.with_apex:
+            self.scaler = GradScaler()
+        self.LOWEST_LOSS = float('inf')
 
     def train(self):
         self.logger.debug("Training...")

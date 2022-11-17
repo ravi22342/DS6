@@ -126,6 +126,10 @@ if __name__ == '__main__':
                         type=int,
                         default=8,
                         help="Number of worker threads")
+    parser.add_argument("-k_folds",
+                        type=int,
+                        default=5,
+                        help="Set the number of folds for cross validation")
     parser.add_argument("-wandb",
                         default=True,
                         help="Set this to true to include wandb logging")
