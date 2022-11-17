@@ -92,20 +92,6 @@ class Pipeline:
         else:
             self.isProb = False
 
-        if cmd_args.train:  # Only if training is to be performed
-            traindataset = self.create_TIOSubDS(vol_path=self.DATASET_FOLDER + '/train/',
-                                                label_path=self.DATASET_FOLDER + '/train_label/',
-                                                crossvalidation_set=training_set)
-            validationdataset = self.create_TIOSubDS(vol_path=self.DATASET_FOLDER + '/validate/',
-                                                     label_path=self.DATASET_FOLDER + '/validate_label/',
-                                                     crossvalidation_set=validation_set, is_train=False)
-
-            self.train_loader = torch.utils.data.DataLoader(traindataset, batch_size=self.batch_size, shuffle=True,
-                                                            num_workers=0)
-            self.validate_loader = torch.utils.data.DataLoader(validationdataset, batch_size=self.batch_size,
-                                                               shuffle=False,
-                                                               num_workers=self.num_worker)
-
     def create_TIOSubDS(self, vol_path, label_path, crossvalidation_set=None, is_train=True, get_subjects_only=False,
                         transforms=None):
         labels = []
