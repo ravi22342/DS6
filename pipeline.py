@@ -26,6 +26,7 @@ from Utils.result_analyser import *
 from Utils.vessel_utils import (convert_and_save_tif, create_diff_mask,
                                 create_mask, load_model, load_model_with_amp,
                                 save_model, write_summary, write_Epoch_summary)
+from Utils.model_manager import getModel
 
 __author__ = "Kartik Prabhu, Mahantesh Pattadkal, and Soumick Chatterjee"
 __copyright__ = "Copyright 2020, Faculty of Computer Science, Otto von Guericke University Magdeburg, Germany"
@@ -98,7 +99,7 @@ class Pipeline:
                         transforms=None):
         labels = []
         for vol in crossvalidation_set:
-            label = vol.replace(vol_path, label_path)
+            label = vol.replace(vol_path[:-1], label_path[:-1])
             if vol == label:
                 sys.exit("Input and Label are same")
             if not (os.path.isfile(label) and os.path.isfile(label)):
@@ -199,8 +200,8 @@ class Pipeline:
             traindataset = self.create_TIOSubDS(vol_path=self.DATASET_FOLDER + '/train/',
                                                 label_path=self.DATASET_FOLDER + '/train_label/',
                                                 crossvalidation_set=train_vols)
-            validationdataset = self.create_TIOSubDS(vol_path=self.DATASET_FOLDER + '/validate/',
-                                                     label_path=self.DATASET_FOLDER + '/validate_label/',
+            validationdataset = self.create_TIOSubDS(vol_path=self.DATASET_FOLDER + '/train/',
+                                                     label_path=self.DATASET_FOLDER + '/train_label/',
                                                      crossvalidation_set=validation_vols, is_train=False)
 
             train_loader = torch.utils.data.DataLoader(traindataset, batch_size=self.batch_size, shuffle=True,
@@ -242,12 +243,14 @@ class Pipeline:
                         diceLoss_batch = 0
                         diceScore_batch = 0
                         IOU_batch = 0
+                        num_patches = 0
 
                         # -------------------------------------------------------------------------------------------------
                         # First Branch Supervised error
                         if not self.isProb:
                             # Compute DiceLoss using batch labels
                             for output in self.model(local_batch):
+                                num_patches += 1
                                 if level == 0:
                                     output1 = output
                                 if level > 0:  # then the output size is reduced, and hence interpolate to patch_size
