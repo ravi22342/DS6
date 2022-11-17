@@ -118,8 +118,8 @@ class Pipeline:
             labels.append(label)
 
         subjects = []
-        for i in range(len(vols)):
-            v = vols[i]
+        for i in range(len(crossvalidation_set)):
+            v = crossvalidation_set[i]
             filename = os.path.basename(v).split('.')[0]
             l = [s for s in labels if filename in s][0]
             subject = tio.Subject(
