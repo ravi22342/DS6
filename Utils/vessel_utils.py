@@ -66,14 +66,14 @@ def write_Epoch_summary(writer, index, focalTverskyLoss=0, diceLoss=0, diceScore
     writer.add_scalar('DiceScore (Per Epoch)', diceScore, index)
     writer.add_scalar('IOU (Per Epoch)', iou, index)  
 
-def save_model(CHECKPOINT_PATH, state, filename='checkpoint'):
+def save_model(CHECKPOINT_PATH, state, filename='checkpoint', fold_index=""):
     """
     Method to save model
     """
     print('Saving model...')
     if not os.path.exists(CHECKPOINT_PATH):
         os.mkdir(CHECKPOINT_PATH)
-    torch.save(state, CHECKPOINT_PATH + filename + str(state['epoch_type']) + '.pth')
+    torch.save(state, CHECKPOINT_PATH + filename + str(state['epoch_type']) + str(fold_index) + '.pth')
 
 
 def load_model(model, optimizer, CHECKPOINT_PATH, batch_index='best', filename='checkpoint', fold_index=""):
