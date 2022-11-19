@@ -57,7 +57,7 @@ if __name__ == '__main__':
                              "Example: /home/output/")
 
     parser.add_argument('-train',
-                        default=True,
+                        default=False,
                         help="To train the model")
     parser.add_argument('-test',
                         default=False,
