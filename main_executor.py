@@ -176,7 +176,7 @@ if __name__ == '__main__':
 
     pipeline = Pipeline(cmd_args=args, model=model, logger=logger,
                         dir_path=DATASET_FOLDER, checkpoint_path=CHECKPOINT_PATH, 
-                        writer_training=writer_training, writer_validating=writer_validating, wandb=wandb)
+                        writer_training=writer_training, writer_validating=writer_validating, test_logger=test_logger, wandb=wandb)
 
     # loading existing checkpoint if supplied
     if bool(LOAD_PATH):

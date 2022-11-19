@@ -40,7 +40,7 @@ __status__ = "Production"
 
 class Pipeline:
 
-    def __init__(self, cmd_args, model, logger, dir_path, checkpoint_path, writer_training, writer_validating,
+    def __init__(self, cmd_args, model, logger, dir_path, checkpoint_path, writer_training, writer_validating, test_logger,
                  training_set=None, validation_set=None, test_set=None, wandb=None):
 
         self.logger = logger
@@ -55,6 +55,7 @@ class Pipeline:
 
         self.writer_training = writer_training
         self.writer_validating = writer_validating
+        self.test_logger = test_logger
         self.checkpoint_path = checkpoint_path
         self.DATASET_FOLDER = dir_path
         self.output_path = cmd_args.output_path
