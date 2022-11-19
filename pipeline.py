@@ -522,9 +522,9 @@ class Pipeline:
                                                                     patches_batch['ground_truth_mip_patch'][
                                                                         idx].float().cuda())
                                     mip_loss_patch += loss_ratios[level] * self.mip_loss(op_mip_2,
-                                                                                         local_labels_mip_axis_2[index])
+                                                                                         local_labels_mip_axis_2[idx])
                                     mip_loss_patch += loss_ratios[level] * self.mip_loss(op_mip_3,
-                                                                                         local_labels_mip_axis_3[index])
+                                                                                         local_labels_mip_axis_3[idx])
 
                                 if not torch.any(torch.isnan(mip_loss_patch)):
                                     mipLoss_iter += mip_loss_patch / len(output)
@@ -615,6 +615,14 @@ class Pipeline:
 
                 local_batch = torch.movedim(local_batch, -1, -3)
                 local_labels = torch.movedim(local_labels, -1, -3)
+                
+                img_list_2 = []
+                img_list_3 = []
+                for img in local_labels:
+                    img_list_2.append(torch.amax(img, 2))  # (1,..)
+                    img_list_3.append(torch.amax(img, 3))  # (1,..)
+                local_labels_mip_axis_2 = torch.stack(img_list_2, dim=0)
+                local_labels_mip_axis_3 = torch.stack(img_list_3, dim=0)
 
                 # Transfer to GPU
                 self.logger.debug('Epoch: {} Batch Index: {}'.format(epoch, batch_index))
@@ -651,16 +659,41 @@ class Pipeline:
                             num_patches = 0
                             for index, op in enumerate(output):
                                 op_mip = torch.amax(op, 1)
+                                op_mip_2 = torch.amax(op, 2)
+                                op_mip_3 = torch.amax(op, 3)
+                                
                                 true_mip = patches_batch['ground_truth_mip_patch'][index].float().cuda()
+                                true_mip_2 = local_labels_mip_axis_2[index].float().cuda()
+                                true_mip_3 = local_labels_mip_axis_3[index].float().cuda()
+                                 
                                 mip_loss_patch += self.focalTverskyLoss(op_mip, true_mip)
+                                
                                 op_mip = op_mip.detach().cpu().squeeze().numpy()
+                                op_mip_2 = op_mip_2.detach().cpu().squeeze().numpy()
+                                op_mip_3 = op_mip_3.detach().cpu().squeeze().numpy()
+                                
                                 true_mip = true_mip.detach().cpu().squeeze().numpy()
+                                true_mip_2 = true_mip_2.detach().cpu().squeeze().numpy()
+                                true_mip_3 = true_mip_3.detach().cpu().squeeze().numpy()
+                                
                                 Image.fromarray((op_mip * 255).astype('uint8'), 'L').save(
                                     os.path.join(result_root,
                                                  "level_" + str(level) + "_patch_" + str(index) + "_op_mip.tif"))
+                                Image.fromarray((op_mip_2 * 255).astype('uint8'), 'L').save(
+                                    os.path.join(result_root,
+                                                 "level_" + str(level) + "_patch_" + str(index) + "_op_mip_2.tif"))
+                                Image.fromarray((op_mip_3 * 255).astype('uint8'), 'L').save(
+                                    os.path.join(result_root,
+                                                 "level_" + str(level) + "_patch_" + str(index) + "_op_mip_3.tif"))
                                 Image.fromarray((true_mip * 255).astype('uint8'), 'L').save(
                                     os.path.join(result_root,
                                                  "level_" + str(level) + "_patch_" + str(index) + "_true_mip.tif"))
+                                Image.fromarray((true_mip_2 * 255).astype('uint8'), 'L').save(
+                                    os.path.join(result_root,
+                                                 "level_" + str(level) + "_patch_" + str(index) + "_true_mip_2.tif"))
+                                Image.fromarray((true_mip_3 * 255).astype('uint8'), 'L').save(
+                                    os.path.join(result_root,
+                                                 "level_" + str(level) + "_patch_" + str(index) + "_true_mip_3.tif"))
                                 test_logger.info("Testing with mip..." +
                                                  "\n floss:" + str(floss) +
                                                  "\n mip_loss:" + str(mip_loss_patch))
@@ -732,8 +765,8 @@ class Pipeline:
 
                     output = torch.movedim(output, -3, -1)
                     for idx, op in enumerate(output):
-                        op_mip = torch.amax(op.squeeze().numpy(), 1)
-                        label_mip = torch.amax(local_label[idx].squeeze().numpy(), 1)
+                        op_mip = torch.amax(op.squeeze(), 1)
+                        label_mip = torch.amax(local_label[idx].squeeze(), 1)
                         Image.fromarray((op_mip * 255).astype('uint8'), 'L').save(
                             os.path.join(result_root, subjectname + "_patch" + str(idx) + "_pred_MIP.tif"))
                         Image.fromarray((label_mip * 255).astype('uint8'), 'L').save(
