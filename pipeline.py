@@ -98,26 +98,30 @@ class Pipeline:
 
     def create_TIOSubDS(self, vol_path, label_path, crossvalidation_set=None, is_train=True, get_subjects_only=False,
                         transforms=None):
-        labels = []
-        for vol in crossvalidation_set:
-            label = vol.replace(vol_path[:-1], label_path[:-1])
-            if vol == label:
-                sys.exit("Input and Label are same")
-            if not (os.path.isfile(label) and os.path.isfile(label)):
-                # trick to include the other file extension
-                if label.endswith('.nii.nii.gz'):
-                    label = label.replace('.nii.nii.gz', '.nii.gz')
-                elif label.endswith('.nii.gz'):
-                    label = label.replace('.nii.gz', '.nii')
-                else:
-                    label = label.replace('.nii', '.nii.gz')
+        if crossvalidation_set is not None:
+            labels = []
+            for vol in crossvalidation_set:
+                label = vol.replace(vol_path[:-1], label_path[:-1])
+                if vol == label:
+                    sys.exit("Input and Label are same")
+                if not (os.path.isfile(label) and os.path.isfile(label)):
+                    # trick to include the other file extension
+                    if label.endswith('.nii.nii.gz'):
+                        label = label.replace('.nii.nii.gz', '.nii.gz')
+                    elif label.endswith('.nii.gz'):
+                        label = label.replace('.nii.gz', '.nii')
+                    else:
+                        label = label.replace('.nii', '.nii.gz')
 
-                # check again, after replacing the file extension
-                if not (os.path.isfile(vol) and os.path.isfile(label)):
-                    self.logger.debug(
-                        "skipping file as label for the corresponding image doesn't exist :" + str(vol))
-                    continue
-            labels.append(label)
+                    # check again, after replacing the file extension
+                    if not (os.path.isfile(vol) and os.path.isfile(label)):
+                        self.logger.debug(
+                            "skipping file as label for the corresponding image doesn't exist :" + str(vol))
+                        continue
+                labels.append(label)
+        else:
+            crossvalidation_set = glob(vol_path + "*.nii") + glob(vol_path + "*.nii.gz")
+            labels = glob(label_path + "*.nii") + glob(label_path + "*.nii.gz")
 
         subjects = []
         for i in range(len(crossvalidation_set)):
