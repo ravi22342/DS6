@@ -46,6 +46,7 @@ class Pipeline:
         self.logger = logger
         self.wandb = wandb
         self.model = model
+        self.model_type = cmd_args.model
         self.lr_1 = cmd_args.learning_rate
         self.logger.info("learning rate " + str(self.lr_1))
         self.optimizer = torch.optim.Adam(model.parameters(), lr=cmd_args.learning_rate)
