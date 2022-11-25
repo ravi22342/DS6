@@ -63,13 +63,17 @@ class SRDataset(Dataset):
         self.patch_size_us = patch_size_us  # If already downsampled data is supplied, then this can be used. Calculate already based on the downsampling size.
         self.norm_data = norm_data
         self.pre_load = pre_load
-        self.pre_loaded_data = pd.DataFrame(columns=["pre_loaded_img", "pre_loaded_lbl", "pre_loaded_lbl_mip"])
+        self.pre_loaded_data = pd.DataFrame(columns=["pre_loaded_img", "pre_loaded_lbl", "pre_loaded_lbl_mip_z", "pre_loaded_lbl_mip_y", "pre_loaded_lbl_mip_x"])
         pre_loaded_lbl = np.empty([1], dtype=object)
         pre_loaded_img = np.empty([1], dtype=object)
-        pre_loaded_lbl_mip = np.empty([1], dtype=object)
+        pre_loaded_lbl_mip_z = np.empty([1], dtype=object)
+        pre_loaded_lbl_mip_y = np.empty([1], dtype=object)
+        pre_loaded_lbl_mip_x = np.empty([1], dtype=object)
         pre_loaded_lbl = np.delete(pre_loaded_lbl, 0)
         pre_loaded_img = np.delete(pre_loaded_img, 0)
-        pre_loaded_lbl_mip = np.delete(pre_loaded_lbl_mip, 0)
+        pre_loaded_lbl_mip_z = np.delete(pre_loaded_lbl_mip_z, 0)
+        pre_loaded_lbl_mip_y = np.delete(pre_loaded_lbl_mip_y, 0)
+        pre_loaded_lbl_mip_x = np.delete(pre_loaded_lbl_mip_x, 0)
 
         if not self.norm_data:
             print("No Norm")  # TODO remove
@@ -130,10 +134,12 @@ class SRDataset(Dataset):
             labelFile = tio.LabelMap(
                 labelFileName)  # shape (Length X Width X Depth X Channels) - changed to label file name as input image can have different (lower) size
             labelFile_data = nibabel.load(labelFileName).get_data()
-            labelFile_mip = torch.from_numpy(labelFile_data).float()
-            labelFile_mip = torch.amax(labelFile_mip, -1)
-            header_shape = labelFile.data.shape
             labelFile_max = labelFile_data.max()
+            labelFile_data = torch.from_numpy(labelFile_data).float()
+            labelFile_mip_z = torch.amax(labelFile_data, -1)
+            labelFile_mip_y = torch.amax(labelFile_data, 1)
+            labelFile_mip_x = torch.amax(labelFile_data, 0)
+            header_shape = labelFile.data.shape
             label_filename_trimmed = labelFileName.split("\\")
             if label_filename_trimmed:
                 label_filename_trimmed = label_filename_trimmed[len(label_filename_trimmed) - 1]
@@ -149,8 +155,12 @@ class SRDataset(Dataset):
                                            {'subjectname': imageFileName, 'data': imageFile.data})
                 pre_loaded_lbl = np.append(pre_loaded_lbl,
                                            {'subjectname': labelFileName, 'data': labelFile.data})
-                pre_loaded_lbl_mip = np.append(pre_loaded_lbl_mip,
-                                                {'subjectname': label_filename_trimmed, 'data': labelFile_mip})
+                pre_loaded_lbl_mip_z = np.append(pre_loaded_lbl_mip_z,
+                                                {'subjectname': label_filename_trimmed, 'data': labelFile_mip_z})
+                pre_loaded_lbl_mip_y = np.append(pre_loaded_lbl_mip_y,
+                                               {'subjectname': label_filename_trimmed, 'data': labelFile_mip_y})
+                pre_loaded_lbl_mip_x = np.append(pre_loaded_lbl_mip_x,
+                                               {'subjectname': label_filename_trimmed, 'data': labelFile_mip_x})
 
             if patch_size != 1 and (n_depth < patch_size or n_length < patch_size or n_width < patch_size):
                 self.logger.debug(
@@ -236,7 +246,8 @@ class SRDataset(Dataset):
         self.data = pd.DataFrame.from_dict(dataDict)
         self.pre_loaded_data = pd.DataFrame.from_dict(
             {'pre_loaded_img': pre_loaded_img, 'pre_loaded_lbl': pre_loaded_lbl,
-             'pre_loaded_lbl_mip': pre_loaded_lbl_mip})
+             'pre_loaded_lbl_mip_z': pre_loaded_lbl_mip_z, 'pre_loaded_lbl_mip_y': pre_loaded_lbl_mip_y,
+             'pre_loaded_lbl_mip_x': pre_loaded_lbl_mip_x})
         self.logger.debug(len(self.data))
 
         if Size is not None and len(self.data) > Size:
@@ -381,23 +392,50 @@ class SRDataset(Dataset):
         if self.return_coords is True:
             trimmed_label_filename = (self.data.iloc[index, 3]).split("\\")
             trimmed_label_filename = trimmed_label_filename[len(trimmed_label_filename) - 1]
-            ground_truth_mip = [lbl for lbl in self.pre_loaded_data['pre_loaded_lbl_mip'] if
-                                 lbl['subjectname'] == trimmed_label_filename][0]['data']
-            ground_truth_mip_patch = ground_truth_mip[startIndex_width:startIndex_width + self.patch_size,
+            ground_truth_mip_z, ground_truth_mip_y, ground_truth_mip_x = None, None, None
+            for idx, lbl in enumerate(self.pre_loaded_data['pre_loaded_lbl_mip_z']):
+                if lbl['subjectname'] == trimmed_label_filename:
+                    ground_truth_mip_z = lbl['data']
+                    ground_truth_mip_y = self.pre_loaded_data['pre_loaded_lbl_mip_y'][idx]['data']
+                    ground_truth_mip_x = self.pre_loaded_data['pre_loaded_lbl_mip_x'][idx]['data']
+                    break
+            if ground_truth_mip_z is None or ground_truth_mip_y is None or ground_truth_mip_x is None:
+                sys.exit("Label Mip not found!")
+            ground_truth_mip_z_patch = ground_truth_mip_z[startIndex_width:startIndex_width + self.patch_size,
                                      startIndex_length:startIndex_length + self.patch_size]
+            ground_truth_mip_y_patch = ground_truth_mip_y[startIndex_width:startIndex_width + self.patch_size,
+                                       startIndex_depth:startIndex_depth + self.patch_size]
+            ground_truth_mip_x_patch = ground_truth_mip_x[startIndex_length:startIndex_length + self.patch_size,
+                                       startIndex_depth:startIndex_depth + self.patch_size]
             pad = ()
-            for dim in range(len(ground_truth_mip_patch.shape)):
-                target_shape = ground_truth_mip_patch.shape[::-1]
+            for dim in range(len(ground_truth_mip_z_patch.shape)):
+                target_shape = ground_truth_mip_z_patch.shape[::-1]
                 pad_needed = self.patch_size - target_shape[dim]
                 pad_dim = (pad_needed // 2, pad_needed - (pad_needed // 2))
                 pad += pad_dim
-            ground_truth_mip_patch = torch.nn.functional.pad(ground_truth_mip_patch, pad[:6], value=np.finfo(np.float).eps)
+            ground_truth_mip_z_patch = torch.nn.functional.pad(ground_truth_mip_z_patch, pad[:6], value=np.finfo(np.float).eps)
+            pad = ()
+            for dim in range(len(ground_truth_mip_y_patch.shape)):
+                target_shape = ground_truth_mip_y_patch.shape[::-1]
+                pad_needed = self.patch_size - target_shape[dim]
+                pad_dim = (pad_needed // 2, pad_needed - (pad_needed // 2))
+                pad += pad_dim
+            ground_truth_mip_y_patch = torch.nn.functional.pad(ground_truth_mip_y_patch, pad[:6], value=np.finfo(np.float).eps)
+            pad = ()
+            for dim in range(len(ground_truth_mip_x_patch.shape)):
+                target_shape = ground_truth_mip_x_patch.shape[::-1]
+                pad_needed = self.patch_size - target_shape[dim]
+                pad_dim = (pad_needed // 2, pad_needed - (pad_needed // 2))
+                pad += pad_dim
+            ground_truth_mip_x_patch = torch.nn.functional.pad(ground_truth_mip_x_patch, pad[:6], value=np.finfo(np.float).eps)
 
             subject = tio.Subject(
                 img=tio.ScalarImage(tensor=patch),
                 label=tio.LabelMap(tensor=targetPatch),
                 subjectname=trimmed_label_filename.split(".")[0],
-                ground_truth_mip_patch=ground_truth_mip_patch,
+                ground_truth_mip_z_patch=ground_truth_mip_z_patch,
+                ground_truth_mip_y_patch=ground_truth_mip_y_patch,
+                ground_truth_mip_x_patch=ground_truth_mip_x_patch,
                 start_coords=start_coords
             )
             return subject
