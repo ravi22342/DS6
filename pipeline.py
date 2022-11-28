@@ -277,27 +277,49 @@ class Pipeline:
                             # Compute MIP loss from the patch on the MIP of the 3D label and the patch prediction
                             mip_loss_patch = torch.tensor(0.001).float().cuda()
                             num_patches = 0
-                            axis_list = ["z", "y", "x"]
-                            for index, op in enumerate(output):
-                                selected_axis = random.choice(axis_list)
-                                if selected_axis is "z":
-                                    op_mip_z = torch.amax(op, -1)
-                                    mip_loss_patch += (loss_ratios[level] * self.mip_loss(op_mip_z,
-                                                                                          patches_batch[
-                                                                                              'ground_truth_mip_z_patch'][
-                                                                                              index].float().cuda()))
-                                elif selected_axis is "y":
-                                    op_mip_y = torch.amax(op, 2)
-                                    mip_loss_patch += (loss_ratios[level] * self.mip_loss(op_mip_y,
-                                                                                          patches_batch[
-                                                                                              'ground_truth_mip_y_patch'][
-                                                                                              index].float().cuda()))
-                                else:
-                                    op_mip_x = torch.amax(op, 1)
-                                    mip_loss_patch += (loss_ratios[level] * self.mip_loss(op_mip_x,
-                                                                                          patches_batch[
-                                                                                              'ground_truth_mip_x_patch'][
-                                                                                              index].float().cuda()))
+
+                            for idx, op in enumerate(output):
+                                op_mip_z = torch.amax(op, -1)
+                                op_mip_y = torch.amax(op, 2)
+                                op_mip_x = torch.amax(op, 1)
+
+                                mip_loss_patch += (loss_ratios[level] * self.mip_loss_coeff * self.mip_loss(op_mip_z,
+                                                                                                            patches_batch[
+                                                                                                                'ground_truth_mip_z_patch']
+                                                                                                            [
+                                                                                                                idx].float().cuda()))
+                                mip_loss_patch += (loss_ratios[level] * self.mip_loss_coeff * self.mip_loss(op_mip_y,
+                                                                                                            patches_batch[
+                                                                                                                'ground_truth_mip_y_patch']
+                                                                                                            [
+                                                                                                                idx].float().cuda()))
+                                mip_loss_patch += (loss_ratios[level] * self.mip_loss_coeff * self.mip_loss(op_mip_x,
+                                                                                                            patches_batch[
+                                                                                                                'ground_truth_mip_x_patch']
+                                                                                                            [
+                                                                                                                idx].float().cuda()))
+
+                            # axis_list = ["z", "y", "x"]
+                            # for index, op in enumerate(output):
+                            #     selected_axis = random.choice(axis_list)
+                            #     if selected_axis is "z":
+                            #         op_mip_z = torch.amax(op, -1)
+                            #         mip_loss_patch += (loss_ratios[level] * self.mip_loss(op_mip_z,
+                            #                                                               patches_batch[
+                            #                                                                   'ground_truth_mip_z_patch'][
+                            #                                                                   index].float().cuda()))
+                            #     elif selected_axis is "y":
+                            #         op_mip_y = torch.amax(op, 2)
+                            #         mip_loss_patch += (loss_ratios[level] * self.mip_loss(op_mip_y,
+                            #                                                               patches_batch[
+                            #                                                                   'ground_truth_mip_y_patch'][
+                            #                                                                   index].float().cuda()))
+                            #     else:
+                            #         op_mip_x = torch.amax(op, 1)
+                            #         mip_loss_patch += (loss_ratios[level] * self.mip_loss(op_mip_x,
+                            #                                                               patches_batch[
+                            #                                                                   'ground_truth_mip_x_patch'][
+                            #                                                                   index].float().cuda()))
                             if not torch.any(torch.isnan(mip_loss_patch)):
                                 mip_loss += mip_loss_patch / len(output)
                             # mip_loss += loss_ratios[level] * self.mip_loss(output, patches_batch, self.pre_loaded_train_lbl_data, self.focalTverskyLoss, self.patch_size)
@@ -356,7 +378,7 @@ class Pipeline:
                         loss = floss
 
                     else:
-                        loss = (self.floss_coeff * floss) + (self.mip_loss_coeff * mip_loss)
+                        loss = (self.floss_coeff * floss) + mip_loss
 
                 # except Exception as error:
                 #     self.logger.exception(error)
