@@ -283,17 +283,17 @@ class Pipeline:
                                 op_mip_y = torch.amax(op, 2)
                                 op_mip_x = torch.amax(op, 1)
 
-                                mip_loss_patch += (loss_ratios[level] * self.mip_loss_coeff * self.mip_loss(op_mip_z,
+                                mip_loss_patch += (loss_ratios[level] * 0.33 * self.mip_loss(op_mip_z,
                                                                                                             patches_batch[
                                                                                                                 'ground_truth_mip_z_patch']
                                                                                                             [
                                                                                                                 idx].float().cuda()))
-                                mip_loss_patch += (loss_ratios[level] * self.mip_loss_coeff * self.mip_loss(op_mip_y,
+                                mip_loss_patch += (loss_ratios[level] * 0.33 * self.mip_loss(op_mip_y,
                                                                                                             patches_batch[
                                                                                                                 'ground_truth_mip_y_patch']
                                                                                                             [
                                                                                                                 idx].float().cuda()))
-                                mip_loss_patch += (loss_ratios[level] * self.mip_loss_coeff * self.mip_loss(op_mip_x,
+                                mip_loss_patch += (loss_ratios[level] * 0.33 * self.mip_loss(op_mip_x,
                                                                                                             patches_batch[
                                                                                                                 'ground_truth_mip_x_patch']
                                                                                                             [
@@ -378,7 +378,7 @@ class Pipeline:
                         loss = floss
 
                     else:
-                        loss = (self.floss_coeff * floss) + mip_loss
+                        loss = (self.floss_coeff * floss) + (self.mip_loss_coeff * mip_loss)
 
                 # except Exception as error:
                 #     self.logger.exception(error)
@@ -531,13 +531,13 @@ class Pipeline:
                                     op_mip_y = torch.amax(op, 2)
                                     op_mip_x = torch.amax(op, 1)
 
-                                    mip_loss_patch += (loss_ratios[level] * self.mip_loss_coeff * self.mip_loss(op_mip_z, patches_batch[
+                                    mip_loss_patch += (loss_ratios[level] * 0.33 * self.mip_loss(op_mip_z, patches_batch[
                                                                                             'ground_truth_mip_z_patch']
                                                                                         [idx].float().cuda()))
-                                    mip_loss_patch += (loss_ratios[level] * self.mip_loss_coeff * self.mip_loss(op_mip_y, patches_batch[
+                                    mip_loss_patch += (loss_ratios[level] * 0.33 * self.mip_loss(op_mip_y, patches_batch[
                                                                                             'ground_truth_mip_y_patch']
                                                                                         [idx].float().cuda()))
-                                    mip_loss_patch += (loss_ratios[level] * self.mip_loss_coeff * self.mip_loss(op_mip_x, patches_batch[
+                                    mip_loss_patch += (loss_ratios[level] * 0.33 * self.mip_loss(op_mip_x, patches_batch[
                                                                                             'ground_truth_mip_x_patch']
                                                                                         [idx].float().cuda()))
 
@@ -580,7 +580,7 @@ class Pipeline:
 
                 floss += floss_iter
                 mipLoss += mipLoss_iter
-                loss = (self.floss_coeff * floss) + mipLoss
+                loss = (self.floss_coeff * floss) + (self.mip_loss_coeff * mipLoss)
                 dl, ds = self.dice(torch.sigmoid(output1), local_labels)
                 dloss += dl.detach().item()
 
