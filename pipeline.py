@@ -272,14 +272,15 @@ class Pipeline:
                             IOU_batch += IOU_score.detach().item()
                             floss += loss_ratios[level] * self.focalTverskyLoss(output, local_labels)
                             # Compute MIP loss from the patch on the MIP of the 3D label and the patch prediction
-                            mip_loss_patch = torch.tensor(0.001).float().cuda()
                             num_patches = 0
-                            for index, op in enumerate(output):
-                                op_mip = torch.amax(op, 1)
-                                mip_loss_patch += loss_ratios[level] * self.mip_loss(op_mip,
-                                                  patches_batch['ground_truth_mip_patch'][index].float().cuda())
-                            if not torch.any(torch.isnan(mip_loss_patch)):
-                                mip_loss += mip_loss_patch / len(output)
+                            if level == 0:
+                                mip_loss_patch = torch.tensor(0.001).float().cuda()
+                                for index, op in enumerate(output):
+                                    op_mip = torch.amax(op, 1)
+                                    mip_loss_patch += loss_ratios[level] * self.mip_loss(op_mip,
+                                                      patches_batch['ground_truth_mip_patch'][index].float().cuda())
+                                if not torch.any(torch.isnan(mip_loss_patch)):
+                                    mip_loss += mip_loss_patch / len(output)
                             # mip_loss += loss_ratios[level] * self.mip_loss(output, patches_batch, self.pre_loaded_train_lbl_data, self.focalTverskyLoss, self.patch_size)
 
                             level += 1
@@ -481,14 +482,15 @@ class Pipeline:
                                     output = torch.nn.functional.interpolate(input=output, size=(64, 64, 64))
                                 output = torch.sigmoid(output)
 
-                                # Compute MIP loss from the patch on the MIP of the 3D label and the patch prediction
-                                mip_loss_patch = torch.tensor(0.001).float().cuda()
-                                for idx, op in enumerate(output):
-                                    op_mip = torch.amax(op, 1)
-                                    mip_loss_patch += self.mip_loss(op_mip,
-                                                      patches_batch['ground_truth_mip_patch'][idx].float().cuda())
-                                if not torch.any(torch.isnan(mip_loss_patch)):
-                                    mipLoss_iter += mip_loss_patch / len(output)
+                                if level == 0:
+                                    # Compute MIP loss from the patch on the MIP of the 3D label and the patch prediction
+                                    mip_loss_patch = torch.tensor(0.001).float().cuda()
+                                    for idx, op in enumerate(output):
+                                        op_mip = torch.amax(op, 1)
+                                        mip_loss_patch += self.mip_loss(op_mip,
+                                                          patches_batch['ground_truth_mip_patch'][idx].float().cuda())
+                                    if not torch.any(torch.isnan(mip_loss_patch)):
+                                        mipLoss_iter += mip_loss_patch / len(output)
                                 # mipLoss_iter += loss_ratios[level] * self.mip_loss(output, patches_batch, self.pre_loaded_validate_lbl_data, self.focalTverskyLoss, self.patch_size)
                                 floss_iter += loss_ratios[level] * self.focalTverskyLoss(output, local_labels)
                                 level += 1
