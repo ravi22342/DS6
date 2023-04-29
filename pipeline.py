@@ -287,15 +287,15 @@ class Pipeline:
                                 mip_loss_patch += self.mip_loss(op_mip_z,
                                                                 patches_batch[
                                                                     'ground_truth_mip_z_patch'][
-                                                                    index].float().cuda()) + \
+                                                                    idx].float().cuda()) + \
                                                   self.mip_loss(op_mip_y,
                                                                 patches_batch[
                                                                     'ground_truth_mip_y_patch'][
-                                                                    index].float().cuda()) + \
+                                                                    idx].float().cuda()) + \
                                                   self.mip_loss(op_mip_x,
                                                                 patches_batch[
                                                                     'ground_truth_mip_x_patch'][
-                                                                    index].float().cuda())
+                                                                    idx].float().cuda())
                             if not torch.any(torch.isnan(mip_loss_patch)):
                                 mip_loss += loss_ratios[level] * (mip_loss_patch / len(output))
                             # mip_loss += loss_ratios[level] * self.mip_loss(output, patches_batch, self.pre_loaded_train_lbl_data, self.focalTverskyLoss, self.patch_size)
