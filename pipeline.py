@@ -538,7 +538,7 @@ class Pipeline:
 
                 floss += floss_iter
                 mipLoss += mipLoss_iter
-                loss = (self.floss_coeff * floss) + (self.mip_loss_coeff * mipLoss)
+                loss = floss + mipLoss
                 dl, ds = self.dice(torch.sigmoid(output1), local_labels)
                 dloss += dl.detach().item()
 
