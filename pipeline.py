@@ -279,7 +279,8 @@ class Pipeline:
                             # Compute MIP loss from the patch on the MIP of the 3D label and the patch prediction
                             mip_loss_patch = torch.tensor(0.001).float().cuda()
                             num_patches = 0
-                            for index, op in enumerate(output):
+
+                            for idx, op in enumerate(output):
                                 op_mip_z = torch.amax(op, -1)
                                 op_mip_y = torch.amax(op, 2)
                                 op_mip_x = torch.amax(op, 1)
