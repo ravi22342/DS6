@@ -1,6 +1,5 @@
 import os
 from glob import glob
-
 import nibabel as nib
 import numpy as np
 import pandas as pd
@@ -13,8 +12,8 @@ def create_diff_mask_binary(predicted, label):
     predicted, label : slices , 2D tensor
     """
 
-    diff1 = np.subtract(label, predicted) > 0 # under_detected
-    diff2 = np.subtract(predicted, label) > 0 # over_detected
+    diff1 = np.subtract(label, predicted) > 0  # under_detected
+    diff2 = np.subtract(predicted, label) > 0  # over_detected
 
     predicted = predicted > 0
 
@@ -23,7 +22,7 @@ def create_diff_mask_binary(predicted, label):
     green = np.array([0, 255, 0], dtype=np.uint8)  # over_detected
     black = np.array([0, 0, 0], dtype=np.uint8)  # background
     white = np.array([255, 255, 255], dtype=np.uint8)  # prediction_output
-    blue = np.array([0, 0, 255], dtype=np.uint8) # over_detected
+    blue = np.array([0, 0, 255], dtype=np.uint8)  # over_detected
     yellow = np.array([255, 255, 0], dtype=np.uint8)  # under_detected
 
     # Make RGB array, pre-filled with black(background)
@@ -35,6 +34,7 @@ def create_diff_mask_binary(predicted, label):
     rgb_image[diff2] = blue
     return rgb_image
 
+
 def save_color_nifti(vol3D, output_path):
     shape_3d = vol3D.shape[0:3]
     rgb_dtype = np.dtype([('R', 'u1'), ('G', 'u1'), ('B', 'u1')])
@@ -42,22 +42,25 @@ def save_color_nifti(vol3D, output_path):
     ni_img = nib.Nifti1Image(vol3D, np.eye(4))
     nib.save(ni_img, output_path)
 
+
 def save_nifti(vol, path):
     img = nib.Nifti1Image(vol, np.eye(4))
     nib.save(img, path)
+
 
 def contains_colour(s, tp):
     for t in tp:
         if s == t[1]:
             return True
 
-def save_tifRGB(image3D, output_path):
+
+def save_tif_rgb(image3D, output_path):
     """
     Method to convert 3D tensor to tiff image
     """
     image_list = []
     for i in range(0, image3D.shape[-2]):
-        image = image3D[...,i,:]
+        image = image3D[..., i, :]
         image = Image.fromarray(image.astype('uint8'), 'RGB')
         # if contains_colour((255,255,255),image.getcolors()):
         #     sds
@@ -68,19 +71,22 @@ def save_tifRGB(image3D, output_path):
             # with open(DATASET_FOLDER+tiff_in) as tiff_in:
             im.save(tifWriter)
             tifWriter.newFrame()
-    
-def dice(pred, true, k = 1):
-    intersection = np.sum(pred[true==k]) * 2.0
+
+
+def dice(pred, true, k=1):
+    intersection = np.sum(pred[true == k]) * 2.0
     dice = intersection / (np.sum(pred) + np.sum(true))
     return dice
 
-def IoU(pred, true):
+
+def iou(pred, true):
     intersection = np.logical_and(pred, true)
     union = np.logical_or(pred, true)
     return np.sum(intersection) / np.sum(union)
 
-def scoreSlabs(pred, true, dim=-1, n_slabs=-1):
-    if n_slabs == -1: #2D
+
+def score_slabs(pred, true, dim=-1, n_slabs=-1):
+    if n_slabs == -1:  # 2D
         n_slabs = pred.shape[dim]
     slabs_pred = np.array_split(pred, n_slabs, dim)
     slabs_true = np.array_split(true, n_slabs, dim)
@@ -88,11 +94,12 @@ def scoreSlabs(pred, true, dim=-1, n_slabs=-1):
     slabs_iou = np.zeros(len(slabs_pred))
     for i in range(len(slabs_pred)):
         slabs_dice[i] = dice(slabs_pred[i], slabs_true[i])
-        slabs_iou[i] = IoU(slabs_pred[i], slabs_true[i])
-    return slabs_dice, slabs_iou, list(range(len(slabs_pred)))   
+        slabs_iou[i] = iou(slabs_pred[i], slabs_true[i])
+    return slabs_dice, slabs_iou, list(range(len(slabs_pred)))
+
 
 def score_results(res_folder, label_folder):
-    df = pd.DataFrame(columns = ["Subject", "Dice", "IoU"])
+    df = pd.DataFrame(columns=["Subject", "Dice", "IoU"])
 
     results = glob(res_folder + "/*.nii") + glob(res_folder + "/*.nii.gz")
     labels = glob(label_folder + "/*.nii") + glob(label_folder + "/*.nii.gz")
@@ -107,11 +114,12 @@ def score_results(res_folder, label_folder):
 
         datum = {"Subject": filename}
         dice3D = dice(result, label)
-        iou3D = IoU(result, label)
+        iou3D = iou(result, label)
         datum = pd.DataFrame.from_dict({**datum, "Dice": [dice3D], "IoU": [iou3D]})
         df = pd.concat([df, datum], ignore_index=True)
 
     df.to_excel(os.path.join(res_folder, "Results_Main.xlsx"))
+
 
 if __name__ == '__main__':
     res_folder = "/home/schatter/Soumick/Output/DS6/OrigVol_MaskedFDIPv0_ProbUNet_AMP_NoGradClip/results"

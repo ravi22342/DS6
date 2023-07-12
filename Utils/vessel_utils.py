@@ -1,16 +1,13 @@
 #!/usr/bin/env python
 # from __future__ import print_function, division
-'''
+"""
 
 Purpose : 
 
-'''
-
+"""
 
 import os
-
 import matplotlib.pyplot as plt
-import nibabel as nib
 import numpy as np
 import torch
 import torch.utils.data
@@ -18,10 +15,6 @@ import torchvision.transforms as transforms
 from PIL import TiffImagePlugin
 from skimage.filters import threshold_otsu
 from torch.cuda.amp import GradScaler
-
-# import GPUtil as GPU
-# import psutil
-# import humanize
 
 __author__ = "Kartik Prabhu, Mahantesh Pattadkal, and Soumick Chatterjee"
 __copyright__ = "Copyright 2020, Faculty of Computer Science, Otto von Guericke University Magdeburg, Germany"
@@ -32,10 +25,13 @@ __maintainer__ = "Soumick Chatterjee"
 __email__ = "soumick.chatterjee@ovgu.de"
 __status__ = "Production"
 
+
 def minmax(array):
     return (array - array.min()) / (array.max() - array.min())
 
-def write_summary(writer, logger, index, original=None, reconstructed=None, focalTverskyLoss=0, diceLoss=0, diceScore=0, iou=0):
+
+def write_summary(writer, logger, index, original=None, reconstructed=None, focal_tversky_loss=0, mip_loss=0, total_loss=0,
+                  dice_loss=0, dice_score=0, iou=0):
     """
     Method to write summary to the tensorboard.
     index: global_index for the visualisation
@@ -43,46 +39,65 @@ def write_summary(writer, logger, index, original=None, reconstructed=None, foca
     Losses: all losses used as metric
     """
     print('Writing Summary...')
-    writer.add_scalar('FocalTverskyLoss', focalTverskyLoss, index)
-    writer.add_scalar('DiceLoss', diceLoss, index)
-    writer.add_scalar('DiceScore', diceScore, index)
+    writer.add_scalar('FocalTverskyLoss', focal_tversky_loss, index)
+    writer.add_scalar('MipLoss', mip_loss, index)
+    writer.add_scalar('TotalLoss', total_loss, index)
+    writer.add_scalar('DiceLoss', dice_loss, index)
+    writer.add_scalar('DiceScore', dice_score, index)
     writer.add_scalar('IOU', iou, index)
 
     if original is not None and reconstructed is not None:
-        writer.add_image('original', original.cpu().data.numpy()[None,:],index)
-        writer.add_image('reconstructed', reconstructed.cpu().data.numpy()[None,:], index)
-        writer.add_image('diff', np.moveaxis(create_diff_mask(reconstructed,original,logger), -1, 0), index) #create_diff_mask is of the format HXWXC, but CXHXW is needed
+        writer.add_image('original', original.cpu().data.numpy()[None, :], index)
+        writer.add_image('reconstructed', reconstructed.cpu().data.numpy()[None, :], index)
+        writer.add_image('diff', np.moveaxis(create_diff_mask(reconstructed, original, logger), -1, 0), index)
+        # create_diff_mask is of the format HXWXC, but CXHXW is needed
 
-def save_model(CHECKPOINT_PATH, state, filename='checkpoint'):
+
+def write_epoch_summary(writer, index, focal_tversky_loss=0, mip_loss=0, total_loss=0, dice_loss=0, dice_score=0, iou=0):
+    """
+    Method to write summary to the tensorboard.
+    index: global_index for the visualisation
+    Losses: all losses used as metric
+    """
+    print('Writing Epoch Summary...')
+    writer.add_scalar('FocalTverskyLoss (Per Epoch)', focal_tversky_loss, index)
+    writer.add_scalar('MipLoss (Per Epoch)', mip_loss, index)
+    writer.add_scalar('TotalLoss (Per Epoch)', total_loss, index)
+    writer.add_scalar('DiceLoss (Per Epoch)', dice_loss, index)
+    writer.add_scalar('DiceScore (Per Epoch)', dice_score, index)
+    writer.add_scalar('IOU (Per Epoch)', iou, index)
+
+
+def save_model(checkpoint_path, state, filename='checkpoint', fold_index=""):
     """
     Method to save model
     """
     print('Saving model...')
-    if not os.path.exists(CHECKPOINT_PATH):
-        os.mkdir(CHECKPOINT_PATH)
-    torch.save(state, CHECKPOINT_PATH + filename + str(state['epoch_type']) + '.pth')
+    if not os.path.exists(checkpoint_path):
+        os.mkdir(checkpoint_path)
+    torch.save(state, checkpoint_path + filename + str(state['epoch_type']) + str(fold_index) + '.pth')
 
 
-def load_model(model, optimizer, CHECKPOINT_PATH, batch_index='best', filename='checkpoint'):
+def load_model(model, optimizer, checkpoint_path, batch_index='best', filename='checkpoint', fold_index=""):
     """
     Method to load model, make sure to set the model to eval, use optimiser if want to continue training
     """
     print('Loading model...')
-    checkpoint = torch.load(os.path.join(CHECKPOINT_PATH, filename + str(batch_index) + '.pth'))
+    checkpoint = torch.load(os.path.join(checkpoint_path, filename + str(batch_index) + str(fold_index) + '.pth'))
     model.load_state_dict(checkpoint['state_dict'])
     optimizer.load_state_dict(checkpoint['optimizer'])
     model.eval()
     return model, optimizer
 
 
-def load_model_with_amp(model, optimizer, CHECKPOINT_PATH, batch_index='best', filename='checkpoint'):
+def load_model_with_amp(model, optimizer, checkpoint_path, batch_index='best', filename='checkpoint', fold_index=""):
     """
     Method to load model, make sure to set the model to eval, use optimiser if want to continue training
     opt_level="O1"
     """
     print('Loading model...')
     model.cuda()
-    checkpoint = torch.load(os.path.join(CHECKPOINT_PATH, filename + str(batch_index) + '.pth'))
+    checkpoint = torch.load(os.path.join(checkpoint_path, filename + str(batch_index) + str(fold_index) + '.pth'))
     model.load_state_dict(checkpoint['state_dict'])
     optimizer.load_state_dict(checkpoint['optimizer'])
     scaler = GradScaler()
@@ -91,19 +106,19 @@ def load_model_with_amp(model, optimizer, CHECKPOINT_PATH, batch_index='best', f
     return model, optimizer, scaler
 
 
-def convert_and_save_tif(image3D, output_path, filename='output.tif', isColored=True):
+def convert_and_save_tif(image3d, output_path, filename='output.tif', is_colored=True):
     """
     Method to convert 3D tensor to tiff image
     """
     image_list = []
-    num = 3# if isColored else 1
-    for i in range(0, int(image3D.shape[0] / num)):
+    num = 3  # if isColored else 1
+    for i in range(0, int(image3d.shape[0] / num)):
         index = i * num
-        tensor_image = image3D[index:(index + num), :, :]
+        tensor_image = image3d[index:(index + num), :, :]
         image = transforms.ToPILImage(mode='RGB')(tensor_image)
         image_list.append(image)
 
-    print('convert_and_save_tif:size of image:'+ str(len(image_list)))
+    print('convert_and_save_tif:size of image:' + str(len(image_list)))
     with TiffImagePlugin.AppendingTiffWriter(output_path + filename, True) as tifWriter:
         for im in image_list:
             # with open(DATASET_FOLDER+tiff_in) as tiff_in:
@@ -111,14 +126,15 @@ def convert_and_save_tif(image3D, output_path, filename='output.tif', isColored=
             tifWriter.newFrame()
     print("Conversion to tiff completed, image saved as {}".format(filename))
 
-def convert_and_save_tif_greyscale(image3D, output_path, filename='output.tif'):
+
+def convert_and_save_tif_greyscale(image3d, output_path, filename='output.tif'):
     """
     Method to convert 3D tensor to tiff image
     """
     image_list = []
 
-    for i in range(0, int(image3D.shape[0])):
-        tensor_image = image3D[i]
+    for i in range(0, int(image3d.shape[0])):
+        tensor_image = image3d[i]
         image = transforms.ToPILImage(mode='F')(tensor_image)
         image_list.append(image)
 
@@ -156,6 +172,7 @@ def create_mask(predicted, logger):
     rgb_image[predicted_binary] = white
 
     return rgb_image
+
 
 def create_diff_mask(predicted, label, logger):
     """
@@ -200,7 +217,7 @@ def create_diff_mask(predicted, label, logger):
     green = np.array([0, 255, 0], dtype=np.uint8)  # over_detected
     black = np.array([0, 0, 0], dtype=np.uint8)  # background
     white = np.array([255, 255, 255], dtype=np.uint8)  # prediction_output
-    blue = np.array([0, 0, 255], dtype=np.uint8) # over_detected
+    blue = np.array([0, 0, 255], dtype=np.uint8)  # over_detected
     yellow = np.array([255, 255, 0], dtype=np.uint8)  # under_detected
 
     # Make RGB array, pre-filled with black(background)
@@ -212,6 +229,7 @@ def create_diff_mask(predicted, label, logger):
     rgb_image[diff2] = blue
 
     return rgb_image
+
 
 def create_diff_mask_binary(predicted, label, logger):
     """
@@ -231,7 +249,7 @@ def create_diff_mask_binary(predicted, label, logger):
     green = np.array([0, 255, 0], dtype=np.uint8)  # over_detected
     black = np.array([0, 0, 0], dtype=np.uint8)  # background
     white = np.array([255, 255, 255], dtype=np.uint8)  # prediction_output
-    blue = np.array([0, 0, 255], dtype=np.uint8) # over_detected
+    blue = np.array([0, 0, 255], dtype=np.uint8)  # over_detected
     yellow = np.array([255, 255, 0], dtype=np.uint8)  # under_detected
 
     # Make RGB array, pre-filled with black(background)
@@ -244,11 +262,12 @@ def create_diff_mask_binary(predicted, label, logger):
     return rgb_image
 
 
-
 def show_diff(label, predicted, diff_image):
-    '''
-   Method to display the differences between label, predicted and diff_image
-   '''
+    """
+
+    Method to display the differences between label, predicted and diff_image
+
+    """
     fig, axes = plt.subplots(ncols=3, figsize=(8, 2.5))
     ax = axes
     ax[0] = plt.subplot(1, 3, 1)
@@ -268,4 +287,3 @@ def show_diff(label, predicted, diff_image):
     ax[2].axis('off')
 
     plt.show()
-

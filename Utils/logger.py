@@ -1,10 +1,9 @@
 #!/usr/bin/env python
-'''
+"""
 
 Purpose : 
 
-'''
-
+"""
 
 import logging
 
@@ -17,6 +16,7 @@ __maintainer__ = "Soumick Chatterjee"
 __email__ = "soumick.chatterjee@ovgu.de"
 __status__ = "Production"
 
+
 class Logger:
     def __init__(self, model_name, logger_path):
         self.logger = logging.getLogger(model_name)
@@ -27,4 +27,4 @@ class Logger:
         self.logger.setLevel(logging.DEBUG)
 
     def get_logger(self):
-      return self.logger
+        return self.logger

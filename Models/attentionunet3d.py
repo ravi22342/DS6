@@ -1,12 +1,11 @@
 #!/usr/bin/env python
 
 # from __future__ import print_function, division
-'''
+"""
 
 Purpose : 
 
-'''
-
+"""
 
 import torch
 import torch.nn as nn
@@ -21,13 +20,14 @@ __maintainer__ = "Soumick Chatterjee"
 __email__ = "soumick.chatterjee@ovgu.de"
 __status__ = "Production"
 
-class conv_block(nn.Module):
+
+class ConvBlock(nn.Module):
     """
     Convolution Block
     """
 
     def __init__(self, in_channels, out_channels, k_size=3, stride=1, padding=1):
-        super(conv_block, self).__init__()
+        super(ConvBlock, self).__init__()
         self.conv = nn.Sequential(
             nn.Conv3d(in_channels=in_channels, out_channels=out_channels, kernel_size=k_size,
                       stride=stride, padding=padding),
@@ -43,14 +43,14 @@ class conv_block(nn.Module):
         return x
 
 
-class up_conv(nn.Module):
+class UpConv(nn.Module):
     """
     Up Convolution Block
     """
 
     # def __init__(self, in_ch, out_ch):
     def __init__(self, in_channels, out_channels, k_size=3, stride=1, padding=1):
-        super(up_conv, self).__init__()
+        super(UpConv, self).__init__()
         self.up = nn.Sequential(
             nn.Upsample(scale_factor=2),
             nn.Conv3d(in_channels=in_channels, out_channels=out_channels, kernel_size=k_size,
@@ -63,13 +63,13 @@ class up_conv(nn.Module):
         return x
 
 
-class Attention_block(nn.Module):
+class AttentionBlock(nn.Module):
     """
     Attention Block
     """
 
     def __init__(self, F_g, F_l, F_int):
-        super(Attention_block, self).__init__()
+        super(AttentionBlock, self).__init__()
 
         self.W_g = nn.Sequential(
             nn.Conv3d(F_l, F_int, kernel_size=1, stride=1, padding=0, bias=True),
@@ -98,14 +98,14 @@ class Attention_block(nn.Module):
         return out
 
 
-class AttU_Net(nn.Module):
+class AttUNet(nn.Module):
     """
     Attention Unet implementation
     Paper: https://arxiv.org/abs/1804.03999
     """
 
     def __init__(self, img_ch=1, output_ch=1):
-        super(AttU_Net, self).__init__()
+        super(AttUNet, self).__init__()
 
         n1 = 64
         filters = [n1, n1 * 2, n1 * 4, n1 * 8, n1 * 16]
@@ -115,27 +115,27 @@ class AttU_Net(nn.Module):
         self.Maxpool3 = nn.MaxPool3d(kernel_size=2, stride=2)
         self.Maxpool4 = nn.MaxPool3d(kernel_size=2, stride=2)
 
-        self.Conv1 = conv_block(img_ch, filters[0])
-        self.Conv2 = conv_block(filters[0], filters[1])
-        self.Conv3 = conv_block(filters[1], filters[2])
-        self.Conv4 = conv_block(filters[2], filters[3])
-        self.Conv5 = conv_block(filters[3], filters[4])
+        self.Conv1 = ConvBlock(img_ch, filters[0])
+        self.Conv2 = ConvBlock(filters[0], filters[1])
+        self.Conv3 = ConvBlock(filters[1], filters[2])
+        self.Conv4 = ConvBlock(filters[2], filters[3])
+        self.Conv5 = ConvBlock(filters[3], filters[4])
 
-        self.Up5 = up_conv(filters[4], filters[3])
-        self.Att5 = Attention_block(F_g=filters[3], F_l=filters[3], F_int=filters[2])
-        self.Up_conv5 = conv_block(filters[4], filters[3])
+        self.Up5 = UpConv(filters[4], filters[3])
+        self.Att5 = AttentionBlock(F_g=filters[3], F_l=filters[3], F_int=filters[2])
+        self.Up_conv5 = ConvBlock(filters[4], filters[3])
 
-        self.Up4 = up_conv(filters[3], filters[2])
-        self.Att4 = Attention_block(F_g=filters[2], F_l=filters[2], F_int=filters[1])
-        self.Up_conv4 = conv_block(filters[3], filters[2])
+        self.Up4 = UpConv(filters[3], filters[2])
+        self.Att4 = AttentionBlock(F_g=filters[2], F_l=filters[2], F_int=filters[1])
+        self.Up_conv4 = ConvBlock(filters[3], filters[2])
 
-        self.Up3 = up_conv(filters[2], filters[1])
-        self.Att3 = Attention_block(F_g=filters[1], F_l=filters[1], F_int=filters[0])
-        self.Up_conv3 = conv_block(filters[2], filters[1])
+        self.Up3 = UpConv(filters[2], filters[1])
+        self.Att3 = AttentionBlock(F_g=filters[1], F_l=filters[1], F_int=filters[0])
+        self.Up_conv3 = ConvBlock(filters[2], filters[1])
 
-        self.Up2 = up_conv(filters[1], filters[0])
-        self.Att2 = Attention_block(F_g=filters[0], F_l=filters[0], F_int=32)
-        self.Up_conv2 = conv_block(filters[1], filters[0])
+        self.Up2 = UpConv(filters[1], filters[0])
+        self.Att2 = AttentionBlock(F_g=filters[0], F_l=filters[0], F_int=32)
+        self.Up_conv2 = ConvBlock(filters[1], filters[0])
 
         self.Conv = nn.Conv3d(filters[0], output_ch, kernel_size=1, stride=1, padding=0)
 

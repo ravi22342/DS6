@@ -1,11 +1,11 @@
 #!/usr/bin/env python
 
 # from __future__ import print_function, division
-'''
+"""
 
 Purpose : 
 
-'''
+"""
 
 import torch
 import torch.nn as nn
@@ -19,6 +19,7 @@ __version__ = "1.0.0"
 __maintainer__ = "Soumick Chatterjee"
 __email__ = "soumick.chatterjee@ovgu.de"
 __status__ = "Production"
+
 
 class Dice(nn.Module):
     """
@@ -72,9 +73,9 @@ class FocalTverskyLoss(nn.Module):
         return pow(abs(1 - pt_1), self.gamma)
 
 
-class FocalTverskyLoss_detailed(nn.Module):
+class FocalTverskyLossDetailed(nn.Module):
     def __init__(self, smooth=1, gamma=0.75, alpha=0.7):
-        super(FocalTverskyLoss_detailed, self).__init__()
+        super(FocalTverskyLossDetailed, self).__init__()
         self.smooth = smooth
         self.gamma = gamma
         self.alpha = alpha
@@ -85,13 +86,14 @@ class FocalTverskyLoss_detailed(nn.Module):
         true_pos = torch.sum(y_true_pos * y_pred_pos)
         false_neg = torch.sum(y_true_pos * (1 - y_pred_pos))
         false_pos = torch.sum((1 - y_true_pos) * y_pred_pos)
-        logger.info("True Positive:" + str(true_pos) + " False_Negative:" + str(false_neg) + " False_Positive:" + str(false_pos))
+        logger.info("True Positive:" + str(true_pos) + " False_Negative:" + str(false_neg) + " False_Positive:" + str(
+            false_pos))
         pt_1 = (true_pos + self.smooth) / (
                 true_pos + self.alpha * false_neg + (1 - self.alpha) * false_pos + self.smooth)
         return pow((1 - pt_1), self.gamma)
 
 
-def getMetric(logger, y_pred, y_true):
+def get_metric(logger, y_pred, y_true):
     y_true_pos = torch.flatten(y_true)
     y_pred_pos = torch.flatten(y_pred)
     true_pos = torch.sum(y_true_pos * y_pred_pos)
@@ -102,7 +104,7 @@ def getMetric(logger, y_pred, y_true):
     return true_pos, false_neg, false_pos, intersection, union
 
 
-def getLosses(logger, true_pos, false_neg, false_pos, intersection, union):
+def get_losses(logger, true_pos, false_neg, false_pos, intersection, union):
     smooth = 1
     gamma = 0.75
     alpha = 0.7
@@ -113,6 +115,7 @@ def getLosses(logger, true_pos, false_neg, false_pos, intersection, union):
     pt_1 = (true_pos + smooth) / (true_pos + alpha * false_neg + (1 - alpha) * false_pos + smooth)
     floss = pow((1 - pt_1), gamma)
 
-    logger.info("True Positive:" + str(true_pos) + " False_Negative:" + str(false_neg) + " False_Positive:" + str(false_pos))
+    logger.info(
+        "True Positive:" + str(true_pos) + " False_Negative:" + str(false_neg) + " False_Positive:" + str(false_pos))
     logger.info("Floss:" + str(floss) + " diceloss:" + str(dice_loss) + " iou:" + str(iou))
     return floss, dice_loss, iou

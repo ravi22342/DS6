@@ -1,19 +1,17 @@
 #!/usr/bin/env python
 """
-
+Purpose: Entry Point for the Vessel Segmentation Solution
 """
 
 import argparse
 import random
-import os
 import numpy as np
 import torch.utils.data
 from torch.utils.tensorboard import SummaryWriter
-
-from pipeline import Pipeline
 from Utils.logger import Logger
-from Utils.model_manager import getModel
-from Utils.vessel_utils import load_model, load_model_with_amp
+from Utils.model_manager import get_model
+from pipeline import Pipeline
+from cross_validation_pipeline import CrossValidationPipeline
 
 __author__ = "Kartik Prabhu, Mahantesh Pattadkal, and Soumick Chatterjee"
 __copyright__ = "Copyright 2020, Faculty of Computer Science, Otto von Guericke University Magdeburg, Germany"
@@ -48,7 +46,8 @@ if __name__ == '__main__':
     parser.add_argument("-dataset_path",
                         default="/vol3/schatter/DS6/Dataset/OriginalVols/300",
                         help="Path to folder containing dataset."
-                             "Further divide folders into train,validate,test, train_label,validate_label and test_label."
+                             "Further divide folders into train,validate,test, train_label, "
+                             "validate_label and test_label."
                              "Example: /home/dataset/")
     parser.add_argument("-output_path",
                         default="/home/schatter/Soumick/Output/DS6/OriginalVols_FDPv0",
@@ -61,6 +60,9 @@ if __name__ == '__main__':
     parser.add_argument('-test',
                         default=True,
                         help="To test the model")
+    parser.add_argument('-cross_validate',
+                        default=False,
+                        help="To train with k-fold cross validation")
     parser.add_argument('-predict',
                         default=False,
                         help="To predict a segmentation output of the model and to get a diff between label and output")
@@ -69,15 +71,17 @@ if __name__ == '__main__':
                         help="Path to the input image to predict an output, ex:/home/test/ww25.nii ")
     parser.add_argument('-predictor_label_path',
                         default="/vol3/schatter/DS6/Dataset/BiasFieldCorrected/300/test_label/vk04.nii.gz",
-                        help="Path to the label image to find the diff between label an output, ex:/home/test/ww25_label.nii ")
-
+                        help="Path to the label image to find the diff between label an output, "
+                             "e.g.,:/home/test/ww25_label.nii ")
     parser.add_argument('-load_path',
                         # default="/home/schatter/Soumick/Output/DS6/OrigVol_MaskedFDIPv0_UNetV2/checkpoint",
                         default="/home/schatter/Soumick/Output/DS6/OriginalVols_FDPv0/UNetMSS_X2_Deform/checkpoint/",
                         help="Path to checkpoint of existing model to load, ex:/home/model/checkpoint")
+
     parser.add_argument('-load_best',
                         default=True,
-                        help="Specifiy whether to load the best checkpoiont or the last. Also to be used if Train and Test both are true.")
+                        help="Specifiy whether to load the best checkpoiont or the last. "
+                             "Also to be used if Train and Test both are true.")
     parser.add_argument('-deform',
                         default=False,
                         action="store_true",
@@ -89,6 +93,12 @@ if __name__ == '__main__':
     parser.add_argument('-apex',
                         default=True,
                         help="To use half precision on model weights.")
+    parser.add_argument('-with_mip',
+                        default=True,
+                        help="Train with MIP Loss")
+    parser.add_argument('-use_madam',
+                        default=False,
+                        help="Set this to True to use madam optimizer")
 
     parser.add_argument("-batch_size",
                         type=int,
@@ -109,15 +119,18 @@ if __name__ == '__main__':
     parser.add_argument("-stride_depth",
                         type=int,
                         default=16,
-                        help="Strides for dividing the input volume into patches in depth dimension (To be used during validation and inference)")
+                        help="Strides for dividing the input volume into patches in depth dimension "
+                             "(To be used during validation and inference)")
     parser.add_argument("-stride_width",
                         type=int,
                         default=32,
-                        help="Strides for dividing the input volume into patches in width dimension (To be used during validation and inference)")
+                        help="Strides for dividing the input volume into patches in width dimension "
+                             "(To be used during validation and inference)")
     parser.add_argument("-stride_length",
                         type=int,
                         default=32,
-                        help="Strides for dividing the input volume into patches in length dimension (To be used during validation and inference)")
+                        help="Strides for dividing the input volume into patches in length dimension "
+                             "(To be used during validation and inference)")
     parser.add_argument("-samples_per_epoch",
                         type=int,
                         default=8000,
@@ -126,6 +139,58 @@ if __name__ == '__main__':
                         type=int,
                         default=8,
                         help="Number of worker threads")
+    parser.add_argument("-floss_coeff",
+                        type=float,
+                        default=1.0,
+                        help="Loss coefficient for floss in total loss")
+    parser.add_argument("-mip_loss_coeff",
+                        type=float,
+                        default=0.5,
+                        help="Loss coefficient for mip_loss in total loss")
+    parser.add_argument("-floss_param_smooth",
+                        type=float,
+                        default=1,
+                        help="Loss coefficient for floss_param_smooth")
+    parser.add_argument("-floss_param_gamma",
+                        type=float,
+                        default=0.75,
+                        help="Loss coefficient for floss_param_gamma")
+    parser.add_argument("-floss_param_alpha",
+                        type=float,
+                        default=0.7,
+                        help="Loss coefficient for floss_param_alpha")
+    parser.add_argument("-mip_loss_param_smooth",
+                        type=float,
+                        default=1,
+                        help="Loss coefficient for mip_loss_param_smooth")
+    parser.add_argument("-mip_loss_param_gamma",
+                        type=float,
+                        default=0.75,
+                        help="Loss coefficient for mip_loss_param_gamma")
+    parser.add_argument("-mip_loss_param_alpha",
+                        type=float,
+                        default=0.7,
+                        help="Loss coefficient for mip_loss_param_alpha")
+    parser.add_argument("-mip_axis",
+                        type=str,
+                        default="z",
+                        help="Set projection axis. Default is z-axis. use axis in [x, y, z] or 'multi'")
+    parser.add_argument("-k_folds",
+                        type=int,
+                        default=5,
+                        help="Set the number of folds for cross validation")
+
+    parser.add_argument("-wandb",
+                        default=False,
+                        help="Set this to true to include wandb logging")
+    parser.add_argument("-wandb_project",
+                        type=str,
+                        default="",
+                        help="Set this to wandb project name e.g., 'DS6_VesselSeg2'")
+    parser.add_argument("-wandb_entity",
+                        type=str,
+                        default="",
+                        help="Set this to wandb project name e.g., 'ds6_vessel_seg2'")
 
     args = parser.parse_args()
 
@@ -148,21 +213,60 @@ if __name__ == '__main__':
     test_logger = Logger(MODEL_NAME + '_test', LOGGER_PATH).get_logger()
 
     # Model
-    model = getModel(args.model)
+    model = torch.nn.DataParallel(get_model(args.model))
     model.cuda()
 
     writer_training = SummaryWriter(TENSORBOARD_PATH_TRAINING)
     writer_validating = SummaryWriter(TENSORBOARD_PATH_VALIDATION)
 
-    pipeline = Pipeline(cmd_args=args, model=model, logger=logger,
-                        dir_path=DATASET_FOLDER, checkpoint_path=CHECKPOINT_PATH, 
-                        writer_training=writer_training, writer_validating=writer_validating)
+    wandb = None
+    if str(args.wandb).lower() == "true":
+        import wandb
+
+        wandb.init(project=args.wandb_project, entity=args.wandb_entity, group=args.model_name, notes=args.model_name)
+        wandb.config = {
+            "learning_rate": args.learning_rate,
+            "epochs": args.num_epochs,
+            "batch_size": args.batch_size,
+            "patch_size": args.patch_size,
+            "samples_per_epoch": args.samples_per_epoch,
+            "mip_loss_coeff": args.mip_loss_coeff,
+            "floss_coeff": args.floss_coeff
+        }
+
+    # Choose pipeline based on whether or not to perform cross validation
+    # If cross validation is to be performed, please create the dataset folder consisting of
+    # train and train_label folders along with test and test_label folders
+    # e.g.,
+    # /sample_dataset
+    #   /train
+    #   /train_label
+    #   /test
+    #   /test_label
+    # Otherwise prepare the dataset folder consisting of
+    # train, train_label, validate, validate_label, test and test_label folders
+    # e.g.,
+    # /sample_dataset
+    #   /train
+    #   /train_label
+    #   /validate
+    #   /validate_label
+    #   /test
+    #   /test_label
+    # Each folder must contain at least one 3D MRA volume in nifti .nii or nii.gz formats
+    if str(args.cross_validate).lower() == "true":
+        pipeline = CrossValidationPipeline(cmd_args=args, model=model, logger=logger,
+                                           dir_path=DATASET_FOLDER, checkpoint_path=CHECKPOINT_PATH,
+                                           writer_training=writer_training, writer_validating=writer_validating,
+                                           test_logger=test_logger, wandb=wandb)
+    else:
+        pipeline = Pipeline(cmd_args=args, model=model, logger=logger,
+                            dir_path=DATASET_FOLDER, checkpoint_path=CHECKPOINT_PATH,
+                            writer_training=writer_training, writer_validating=writer_validating, wandb=wandb)
 
     # loading existing checkpoint if supplied
     if bool(LOAD_PATH):
         pipeline.load(checkpoint_path=LOAD_PATH, load_best=args.load_best)
-
-    # try:
 
     if args.train:
         pipeline.train()
@@ -170,15 +274,15 @@ if __name__ == '__main__':
 
     if args.test:
         if args.load_best:
-            pipeline.load(load_best=True)
+            if bool(LOAD_PATH):
+                pipeline.load(checkpoint_path=LOAD_PATH, load_best=args.load_best)
+            else:
+                pipeline.load(load_best=args.load_best)
         pipeline.test(test_logger=test_logger)
         torch.cuda.empty_cache()  # to avoid memory errors
 
     if args.predict:
         pipeline.predict(args.predictor_path, args.predictor_label_path, predict_logger=test_logger)
 
-
-    # except Exception as error:
-    #     logger.exception(error)
     writer_training.close()
     writer_validating.close()
