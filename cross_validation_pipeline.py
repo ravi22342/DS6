@@ -205,6 +205,9 @@ class CrossValidationPipeline:
                     label=tio.LabelMap(l),
                     subjectname=filename,
                 )
+                transforms = tio.ToCanonical(), tio.Resample(tio.ScalarImage(v))
+                transform = tio.Compose(transforms)
+                subject = transform(subject)
                 subjects.append(subject)
 
         if get_subjects_only:

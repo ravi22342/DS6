@@ -80,7 +80,7 @@ if __name__ == '__main__':
                         default=False,
                         help="To test the model")
     parser.add_argument('-eval',
-                        default=True,
+                        default=False,
                         help="To render inference of specified nifti 3D volumes")
     parser.add_argument('-cross_validate',
                         default=False,

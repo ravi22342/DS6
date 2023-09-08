@@ -102,17 +102,17 @@ class Pipeline:
 
         if self.with_apex:
             self.scaler = GradScaler()
-
-        self.logger.info("learning rate " + str(self.lr_1))
-        self.logger.info("batch size " + str(self.batch_size))
-        self.logger.info("patch size " + str(self.patch_size))
-        self.logger.info("Gradient Clipping " + str(self.clip_grads))
-        self.logger.info("With mixed precision " + str(self.with_apex))
-        self.logger.info("With MIP " + str(self.with_mip))
-        if self.with_mip:
-            self.logger.info("MIP axis " + str(self.mip_axis))
-            self.logger.info("floss coefficient " + str(self.floss_coeff))
-            self.logger.info("mip loss coefficient " + str(self.mip_loss_coeff))
+        if self.logger is not None:
+            self.logger.info("learning rate " + str(self.lr_1))
+            self.logger.info("batch size " + str(self.batch_size))
+            self.logger.info("patch size " + str(self.patch_size))
+            self.logger.info("Gradient Clipping " + str(self.clip_grads))
+            self.logger.info("With mixed precision " + str(self.with_apex))
+            self.logger.info("With MIP " + str(self.with_mip))
+            if self.with_mip:
+                self.logger.info("MIP axis " + str(self.mip_axis))
+                self.logger.info("floss coefficient " + str(self.floss_coeff))
+                self.logger.info("mip loss coefficient " + str(self.mip_loss_coeff))
 
         # set probabilistic property
         if "Models.prob" in self.model.__module__:
@@ -176,7 +176,7 @@ class Pipeline:
     @staticmethod
     def create_tio_sub_ds(vol_path, label_path, logger, patch_size,
                           stride_depth, stride_length, stride_width, samples_per_epoch,
-                          is_train=True, with_mip=False, get_subjects_only=False):
+                          is_train=True, with_mip=False, get_subjects_only=False, is_eval=False):
         """
         Purpose: Creates 3D patches from 3D volumes using torchio and SRDataset
         :param vol_path: Path to 3D MRA volumes
@@ -209,18 +209,28 @@ class Pipeline:
             # TODO implement patch_size_us if required - patch_size//scaling_factor
         else:
             # Iteratively construct torchio subject dataset with ScalarImages and labels and then create patches queue
-            vols = glob(vol_path + "*.nii") + glob(vol_path + "*.nii.gz")
-            labels = glob(label_path + "*.nii") + glob(label_path + "*.nii.gz")
+            vols = glob(vol_path + "/*.nii") + glob(vol_path + "/*.nii.gz")
+            if not is_eval:
+                labels = glob(label_path + "*.nii") + glob(label_path + "*.nii.gz")
             subjects = []
             for i in range(len(vols)):
                 v = vols[i]
                 filename = os.path.basename(v).split('.')[0]
-                l = [s for s in labels if filename in s][0]
-                subject = tio.Subject(
-                    img=tio.ScalarImage(v),
-                    label=tio.LabelMap(l),
-                    subjectname=filename,
-                )
+                if not is_eval:
+                    l = [s for s in labels if filename in s][0]
+                    subject = tio.Subject(
+                        img=tio.ScalarImage(v),
+                        label=tio.LabelMap(l),
+                        subjectname=filename,
+                    )
+                else:
+                    subject = tio.Subject(
+                        img=tio.ScalarImage(v),
+                        subjectname=filename,
+                    )
+                transforms = tio.ToCanonical(), tio.Resample(tio.ScalarImage(v))
+                transform = tio.Compose(transforms)
+                subject = transform(subject)
                 subjects.append(subject)
 
         if get_subjects_only:
@@ -336,10 +346,12 @@ class Pipeline:
                                         mip_loss_patch += self.mip_loss(op_mip_z,
                                                                         patches_batch['ground_truth_mip_z_patch']
                                                                         [idx].float().cuda()) + \
-                                            self.mip_loss(op_mip_y, patches_batch['ground_truth_mip_y_patch']
-                                                          [idx].float().cuda()) + \
-                                            self.mip_loss(op_mip_x, patches_batch['ground_truth_mip_x_patch']
-                                                          [idx].float().cuda())
+                                                          self.mip_loss(op_mip_y,
+                                                                        patches_batch['ground_truth_mip_y_patch']
+                                                                        [idx].float().cuda()) + \
+                                                          self.mip_loss(op_mip_x,
+                                                                        patches_batch['ground_truth_mip_x_patch']
+                                                                        [idx].float().cuda())
                                     else:
                                         axis = -1
                                         if self.mip_axis == "x":
@@ -536,12 +548,12 @@ class Pipeline:
                                             mip_loss_patch += self.mip_loss(op_mip_z,
                                                                             patches_batch['ground_truth_mip_z_patch']
                                                                             [idx].float().cuda()) + \
-                                                self.mip_loss(op_mip_y,
-                                                              patches_batch['ground_truth_mip_y_patch']
-                                                              [idx].float().cuda()) + \
-                                                self.mip_loss(op_mip_x,
-                                                              patches_batch['ground_truth_mip_x_patch']
-                                                              [idx].float().cuda())
+                                                              self.mip_loss(op_mip_y,
+                                                                            patches_batch['ground_truth_mip_y_patch']
+                                                                            [idx].float().cuda()) + \
+                                                              self.mip_loss(op_mip_x,
+                                                                            patches_batch['ground_truth_mip_x_patch']
+                                                                            [idx].float().cuda())
                                         else:
                                             axis = -1
                                             if self.mip_axis == "x":
@@ -724,8 +736,8 @@ class Pipeline:
         :param model_name: name of the results folder at output path
         """
         if test_subjects is None:
-            test_folder_path = self.DATASET_FOLDER + '/test/'
-            test_label_path = self.DATASET_FOLDER + '/test_label/'
+            test_folder_path = self.DATASET_FOLDER
+            test_label_path = None  # self.DATASET_FOLDER + '/test_label/'
             test_subjects = Pipeline.create_tio_sub_ds(vol_path=test_folder_path,
                                                        label_path=test_label_path,
                                                        logger=None,
@@ -736,6 +748,7 @@ class Pipeline:
                                                        samples_per_epoch=self.samples_per_epoch,
                                                        with_mip=False,
                                                        is_train=False,
+                                                       is_eval=True,
                                                        get_subjects_only=True)
 
         overlap = np.subtract(self.patch_size, (self.stride_length, self.stride_width, self.stride_depth))
