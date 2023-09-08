@@ -107,11 +107,9 @@ if __name__ == '__main__':
                         help="Specifiy whether to load the pre trained weights for training/tuning.")
     parser.add_argument('-deform',
                         default=False,
-                        action="store_true",
                         help="To use deformation for training")
     parser.add_argument('-clip_grads',
                         default=True,
-                        action="store_true",
                         help="To use deformation for training")
     parser.add_argument('-apex',
                         default=True,
@@ -217,7 +215,7 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    if args.deform:
+    if str(args.deform).lower() == "true":
         args.model_name += "_Deform"
 
     MODEL_NAME = args.model_name

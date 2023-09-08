@@ -68,9 +68,9 @@ class CrossValidationPipeline:
             self.optimizer = Madam(model.parameters(), lr=cmd_args.learning_rate)
         else:
             self.optimizer = torch.optim.Adam(model.parameters(), lr=cmd_args.learning_rate)
-        self.clip_grads = cmd_args.clip_grads
-        self.with_apex = cmd_args.apex
-        self.deform = cmd_args.deform
+        self.clip_grads = str(cmd_args.clip_grads).lower() == "true"
+        self.with_apex = str(cmd_args.apex).lower() == "true"
+        self.deform = str(cmd_args.deform).lower() == "true"
         self.with_mip = str(cmd_args.with_mip).lower() == "true"
         self.mip_axis = cmd_args.mip_axis
         self.mip_loss_param_smooth = cmd_args.mip_loss_param_smooth
