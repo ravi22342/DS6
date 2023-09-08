@@ -41,25 +41,47 @@ if __name__ == '__main__':
                              "3{Attention-U-Net}; \n"
                              "4{Probabilistic-U-Net};")
     parser.add_argument("-model_name",
-                        default="Model_v1",
+                        default="Model_MIP_v1",
                         help="Name of the model")
     parser.add_argument("-dataset_path",
-                        default="/vol3/schatter/DS6/Dataset/OriginalVols/300",
+                        default="",
                         help="Path to folder containing dataset."
-                             "Further divide folders into train,validate,test, train_label, "
-                             "validate_label and test_label."
+                             "If cross validation is to be performed, please create the dataset folder consisting of"
+                             "train and train_label folders along with test and test_label folders"
+                             "e.g."
+                             "/sample_dataset"
+                             "  /train"
+                             "  /train_label"
+                             "  /test"
+                             "  /test_label"
+                             "else if training is to be performed, prepare the dataset folder consisting of"
+                             "train, train_label, validate, validate_label, test and test_label folders"
+                             "e.g.,"
+                             "/sample_dataset"
+                             "  /train"
+                             "  /train_label"
+                             "  /validate"
+                             "  /validate_label"
+                             "  /test"
+                             "  /test_label"
+                             "each folder must contain at least one 3D MRA volume in nifti .nii or nii.gz formats"
+                             "else if inference is to be performed, specify folder consisting of"
+                             "3D MRA volume in nifti .nii or nii.gz formats"
                              "Example: /home/dataset/")
     parser.add_argument("-output_path",
-                        default="/home/schatter/Soumick/Output/DS6/OriginalVols_FDPv0",
+                        default="",
                         help="Folder path to store output "
                              "Example: /home/output/")
 
     parser.add_argument('-train',
-                        default=True,
+                        default=False,
                         help="To train the model")
     parser.add_argument('-test',
-                        default=True,
+                        default=False,
                         help="To test the model")
+    parser.add_argument('-eval',
+                        default=True,
+                        help="To render inference of specified nifti 3D volumes")
     parser.add_argument('-cross_validate',
                         default=False,
                         help="To train with k-fold cross validation")
@@ -67,21 +89,22 @@ if __name__ == '__main__':
                         default=False,
                         help="To predict a segmentation output of the model and to get a diff between label and output")
     parser.add_argument('-predictor_path',
-                        default="/vol3/schatter/DS6/Dataset/BiasFieldCorrected/300/test/vk04.nii",
+                        default="",
                         help="Path to the input image to predict an output, ex:/home/test/ww25.nii ")
     parser.add_argument('-predictor_label_path',
-                        default="/vol3/schatter/DS6/Dataset/BiasFieldCorrected/300/test_label/vk04.nii.gz",
+                        default="",
                         help="Path to the label image to find the diff between label an output, "
                              "e.g.,:/home/test/ww25_label.nii ")
     parser.add_argument('-load_path',
-                        # default="/home/schatter/Soumick/Output/DS6/OrigVol_MaskedFDIPv0_UNetV2/checkpoint",
-                        default="/home/schatter/Soumick/Output/DS6/OriginalVols_FDPv0/UNetMSS_X2_Deform/checkpoint/",
+                        default="./",
                         help="Path to checkpoint of existing model to load, ex:/home/model/checkpoint")
-
     parser.add_argument('-load_best',
                         default=True,
-                        help="Specifiy whether to load the best checkpoiont or the last. "
+                        help="Specifiy whether to load the best checkpoint or the last. "
                              "Also to be used if Train and Test both are true.")
+    parser.add_argument('-pre_train',
+                        default=True,
+                        help="Specifiy whether to load the pre trained weights for training/tuning.")
     parser.add_argument('-deform',
                         default=False,
                         action="store_true",
@@ -110,7 +133,7 @@ if __name__ == '__main__':
                         help="Number of epochs for training")
     parser.add_argument("-learning_rate",
                         type=float,
-                        default=0.001,
+                        default=0.0001,
                         help="Learning rate")
     parser.add_argument("-patch_size",
                         type=int,
@@ -141,11 +164,11 @@ if __name__ == '__main__':
                         help="Number of worker threads")
     parser.add_argument("-floss_coeff",
                         type=float,
-                        default=1.0,
+                        default=0.7,
                         help="Loss coefficient for floss in total loss")
     parser.add_argument("-mip_loss_coeff",
                         type=float,
-                        default=0.5,
+                        default=0.3,
                         help="Loss coefficient for mip_loss in total loss")
     parser.add_argument("-floss_param_smooth",
                         type=float,
@@ -203,21 +226,33 @@ if __name__ == '__main__':
 
     LOAD_PATH = args.load_path
     CHECKPOINT_PATH = OUTPUT_PATH + "/" + MODEL_NAME + '/checkpoint/'
-    TENSORBOARD_PATH_TRAINING = OUTPUT_PATH + "/" + MODEL_NAME + '/tensorboard/tensorboard_training/'
-    TENSORBOARD_PATH_VALIDATION = OUTPUT_PATH + "/" + MODEL_NAME + '/tensorboard/tensorboard_validation/'
-    TENSORBOARD_PATH_TESTING = OUTPUT_PATH + "/" + MODEL_NAME + '/tensorboard/tensorboard_testing/'
 
-    LOGGER_PATH = OUTPUT_PATH + "/" + MODEL_NAME + '.log'
+    if str(args.eval).lower() == "true":
+        TENSORBOARD_PATH_TRAINING = None
+        TENSORBOARD_PATH_VALIDATION = None
+        TENSORBOARD_PATH_TESTING = None
+        LOGGER_PATH = None
+        logger = None
+        test_logger = None
+        writer_training = None
+        writer_validating = None
 
-    logger = Logger(MODEL_NAME, LOGGER_PATH).get_logger()
-    test_logger = Logger(MODEL_NAME + '_test', LOGGER_PATH).get_logger()
+    else:
+        TENSORBOARD_PATH_TRAINING = OUTPUT_PATH + "/" + MODEL_NAME + '/tensorboard/tensorboard_training/'
+        TENSORBOARD_PATH_VALIDATION = OUTPUT_PATH + "/" + MODEL_NAME + '/tensorboard/tensorboard_validation/'
+        TENSORBOARD_PATH_TESTING = OUTPUT_PATH + "/" + MODEL_NAME + '/tensorboard/tensorboard_testing/'
+
+        LOGGER_PATH = OUTPUT_PATH + "/" + MODEL_NAME + '.log'
+
+        logger = Logger(MODEL_NAME, LOGGER_PATH).get_logger()
+        test_logger = Logger(MODEL_NAME + '_test', LOGGER_PATH).get_logger()
+
+        writer_training = SummaryWriter(TENSORBOARD_PATH_TRAINING)
+        writer_validating = SummaryWriter(TENSORBOARD_PATH_VALIDATION)
 
     # Model
     model = torch.nn.DataParallel(get_model(args.model))
     model.cuda()
-
-    writer_training = SummaryWriter(TENSORBOARD_PATH_TRAINING)
-    writer_validating = SummaryWriter(TENSORBOARD_PATH_VALIDATION)
 
     wandb = None
     if str(args.wandb).lower() == "true":
@@ -265,15 +300,15 @@ if __name__ == '__main__':
                             writer_training=writer_training, writer_validating=writer_validating, wandb=wandb)
 
     # loading existing checkpoint if supplied
-    if bool(LOAD_PATH):
+    if str(args.pre_train).lower() == "true":
         pipeline.load(checkpoint_path=LOAD_PATH, load_best=args.load_best)
 
-    if args.train:
+    if str(args.train).lower() == "true":
         pipeline.train()
         torch.cuda.empty_cache()  # to avoid memory errors
 
-    if args.test:
-        if args.load_best:
+    if str(args.test).lower() == "true":
+        if str(args.load_best).lower() == "true":
             if bool(LOAD_PATH):
                 pipeline.load(checkpoint_path=LOAD_PATH, load_best=args.load_best)
             else:
@@ -281,8 +316,12 @@ if __name__ == '__main__':
         pipeline.test(test_logger=test_logger)
         torch.cuda.empty_cache()  # to avoid memory errors
 
-    if args.predict:
+    if str(args.eval).lower() == "true":
+        pipeline.eval(model_name=args.model_name)
+
+    if str(args.predict).lower() == "true":
         pipeline.predict(args.predictor_path, args.predictor_label_path, predict_logger=test_logger)
 
-    writer_training.close()
-    writer_validating.close()
+    if str(args.eval).lower() != "true":
+        writer_training.close()
+        writer_validating.close()

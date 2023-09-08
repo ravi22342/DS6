@@ -717,6 +717,84 @@ class Pipeline:
 
         df.to_excel(os.path.join(result_root, "Results_Main.xlsx"))
 
+    def eval(self, test_subjects=None, model_name="mip_model1"):
+        """
+        Purpose: Render inference on nifti 3D volumes specified using pretrained UNet-MSS network
+        :param test_subjects: Optionally an array of tio.subjects can be passed on which the inference will be to drawn
+        :param model_name: name of the results folder at output path
+        """
+        if test_subjects is None:
+            test_folder_path = self.DATASET_FOLDER + '/test/'
+            test_label_path = self.DATASET_FOLDER + '/test_label/'
+            test_subjects = Pipeline.create_tio_sub_ds(vol_path=test_folder_path,
+                                                       label_path=test_label_path,
+                                                       logger=None,
+                                                       patch_size=self.patch_size,
+                                                       stride_width=self.stride_width,
+                                                       stride_depth=self.stride_depth,
+                                                       stride_length=self.stride_length,
+                                                       samples_per_epoch=self.samples_per_epoch,
+                                                       with_mip=False,
+                                                       is_train=False,
+                                                       get_subjects_only=True)
+
+        overlap = np.subtract(self.patch_size, (self.stride_length, self.stride_width, self.stride_depth))
+        result_root = os.path.join(self.output_path, model_name)
+        os.makedirs(result_root, exist_ok=True)
+
+        self.model.eval()
+
+        with torch.no_grad():
+            for test_subject in test_subjects:
+                if 'label' in test_subject:
+                    label = test_subject['label'][tio.DATA].float().squeeze().numpy()
+                    del test_subject['label']
+                else:
+                    label = None
+                subjectname = test_subject['subjectname']
+                del test_subject['subjectname']
+
+                grid_sampler = tio.inference.GridSampler(
+                    test_subject,
+                    self.patch_size,
+                    overlap,
+                )
+                aggregator = tio.inference.GridAggregator(grid_sampler, overlap_mode="average")
+                patch_loader = torch.utils.data.DataLoader(grid_sampler, batch_size=self.batch_size, shuffle=False,
+                                                           num_workers=self.num_worker)
+
+                for index, patches_batch in enumerate(tqdm(patch_loader)):
+                    local_batch = self.normaliser(patches_batch['img'][tio.DATA].float().cuda())
+                    locations = patches_batch[tio.LOCATION]
+
+                    local_batch = torch.movedim(local_batch, -1, -3)
+
+                    with autocast(enabled=self.with_apex):
+                        if not self.isProb:
+                            output = self.model(local_batch)
+                            if type(output) is tuple or type(output) is list:
+                                output = output[0]
+                            output = torch.sigmoid(output).detach().cpu()
+                        else:
+                            self.model.forward(local_batch, training=False)
+                            output = self.model.sample(
+                                testing=True).detach().cpu()  # TODO: need to check whether sigmoid is needed for prob
+
+                    output = torch.movedim(output, -3, -1).type(local_batch.type())
+                    aggregator.add_batch(output, locations)
+
+                predicted = aggregator.get_output_tensor().squeeze().numpy()
+
+                try:
+                    thresh = threshold_otsu(predicted)
+                    result = predicted > thresh
+                except Exception as error:
+                    print(error)
+                    result = predicted > 0.5  # exception only if input image seems to have just one color 1.0.
+                result = result.astype('uint16')
+
+                save_nifti(result, os.path.join(result_root, subjectname + ".nii.gz"))
+
     def predict(self, image_path, label_path, predict_logger):
         """
         Purpose: Predicts segmentation for given 3D MRA Volume
