@@ -165,7 +165,7 @@ class SRDataset(Dataset):
                 label_filename)
             # shape (Length X Width X Depth X Channels) -
             # changed to label file name as input image can have different (lower) size
-            label_file_data = nibabel.load(label_filename).get_data()
+            label_file_data = nibabel.load(label_filename).get_fdata()
             label_file_max = label_file_data.max()
             label_file_data = torch.from_numpy(label_file_data).float()
             label_file_mip_z = torch.amax(label_file_data, -1)
@@ -401,11 +401,11 @@ class SRDataset(Dataset):
                     pad_dim = (pad_needed // 2, pad_needed - (pad_needed // 2))
                     pad_us += pad_dim
             patch = f.pad(patch, pad_us[:6], value=np.finfo(
-                np.float).eps)
+                float).eps)
             # tuple has to be reveresed before using it for padding.
             # As the tuple contains in DHW manner, and input is needed as WHD mannger
             # TODO input already in WXLXD
-            target_patch = f.pad(target_patch, pad[:6], value=np.finfo(np.float).eps)
+            target_patch = f.pad(target_patch, pad[:6], value=np.finfo(float).eps)
 
         if self.return_coords is True:
             trimmed_label_filename = (self.data.iloc[index, 3]).split("\\")
@@ -432,7 +432,7 @@ class SRDataset(Dataset):
                 pad_dim = (pad_needed // 2, pad_needed - (pad_needed // 2))
                 pad += pad_dim
             ground_truth_mip_z_patch = torch.nn.functional.pad(ground_truth_mip_z_patch, pad[:6],
-                                                               value=np.finfo(np.float).eps)
+                                                               value=np.finfo(float).eps)
             pad = ()
             for dim in range(len(ground_truth_mip_y_patch.shape)):
                 target_shape = ground_truth_mip_y_patch.shape[::-1]
@@ -440,7 +440,7 @@ class SRDataset(Dataset):
                 pad_dim = (pad_needed // 2, pad_needed - (pad_needed // 2))
                 pad += pad_dim
             ground_truth_mip_y_patch = torch.nn.functional.pad(ground_truth_mip_y_patch, pad[:6],
-                                                               value=np.finfo(np.float).eps)
+                                                               value=np.finfo(float).eps)
             pad = ()
             for dim in range(len(ground_truth_mip_x_patch.shape)):
                 target_shape = ground_truth_mip_x_patch.shape[::-1]
@@ -448,7 +448,7 @@ class SRDataset(Dataset):
                 pad_dim = (pad_needed // 2, pad_needed - (pad_needed // 2))
                 pad += pad_dim
             ground_truth_mip_x_patch = torch.nn.functional.pad(ground_truth_mip_x_patch, pad[:6],
-                                                               value=np.finfo(np.float).eps)
+                                                               value=np.finfo(float).eps)
 
             subject = tio.Subject(
                 img=tio.ScalarImage(tensor=patch),
