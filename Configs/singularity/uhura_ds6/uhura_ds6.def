@@ -3,7 +3,7 @@ From: cradhakr/uhura_ds6
 
 %runscript
 
-    exec conda run -n uhura_mip --no-capture-output python /uhura_ds6/main_executor.py -model_name "uhura_ds6" -dataset_path /data -output_path /output -load_path /uhura_ds6/ -with_mip False "$@"
+    exec /opt/conda/bin/conda run -n uhura_mip --no-capture-output python /uhura_ds6/main_executor.py -model_name "uhura_ds6" -dataset_path /data -output_path /output -load_path /uhura_ds6/ -with_mip False "$@"
 
 
 %post
