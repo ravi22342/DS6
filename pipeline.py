@@ -648,6 +648,7 @@ class Pipeline:
 
         with torch.no_grad():
             for test_subject in test_subjects:
+                affine = test_subject['img'][tio.AFFINE]
                 if 'label' in test_subject:
                     label = test_subject['label'][tio.DATA].float().squeeze().numpy()
                     del test_subject['label']
@@ -704,7 +705,7 @@ class Pipeline:
                     df = pd.concat([df, datum], ignore_index=True)
 
                 if save_results:
-                    save_nifti(result, os.path.join(result_root, subjectname + ".nii.gz"))
+                    save_nifti(result, os.path.join(result_root, subjectname + ".nii.gz"), affine=affine)
 
                     result_mip = np.max(result, axis=-1)
                     Image.fromarray((result_mip * 255).astype('uint8'), 'L').save(
@@ -759,6 +760,7 @@ class Pipeline:
 
         with torch.no_grad():
             for test_subject in test_subjects:
+                affine = test_subject['img'][tio.AFFINE]
                 if 'label' in test_subject:
                     label = test_subject['label'][tio.DATA].float().squeeze().numpy()
                     del test_subject['label']
@@ -806,7 +808,7 @@ class Pipeline:
                     result = predicted > 0.5  # exception only if input image seems to have just one color 1.0.
                 result = result.astype('uint16')
 
-                save_nifti(result, os.path.join(result_root, subjectname + ".nii.gz"))
+                save_nifti(result, os.path.join(result_root, subjectname + ".nii.gz"), affine=affine)
 
     def predict(self, image_path, label_path, predict_logger):
         """

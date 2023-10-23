@@ -43,8 +43,11 @@ def save_color_nifti(vol3D, output_path):
     nib.save(ni_img, output_path)
 
 
-def save_nifti(vol, path):
-    img = nib.Nifti1Image(vol, np.eye(4))
+def save_nifti(vol, path, affine=None):
+    if affine is not None:
+        img = nib.Nifti1Image(vol, affine)
+    else:
+        img = nib.Nifti1Image(vol, np.eye(4))
     nib.save(img, path)
 
 

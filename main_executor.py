@@ -212,6 +212,10 @@ if __name__ == '__main__':
                         type=str,
                         default="",
                         help="Set this to wandb project name e.g., 'ds6_vessel_seg2'")
+    parser.add_argument("-wandb_api_key",
+                        type=str,
+                        default="",
+                        help="API Key to login that can be found at https://wandb.ai/authorize")
 
     args = parser.parse_args()
 
@@ -255,7 +259,7 @@ if __name__ == '__main__':
     wandb = None
     if str(args.wandb).lower() == "true":
         import wandb
-
+        wandb.login(key=args.wandb_api_key)
         wandb.init(project=args.wandb_project, entity=args.wandb_entity, group=args.model_name, notes=args.model_name)
         wandb.config = {
             "learning_rate": args.learning_rate,

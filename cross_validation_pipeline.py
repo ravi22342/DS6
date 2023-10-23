@@ -111,17 +111,18 @@ class CrossValidationPipeline:
         if self.with_apex:
             self.scaler = GradScaler()
 
-        self.logger.info("learning rate " + str(self.lr_1))
-        self.logger.info("Number of folds " + str(self.k_folds))
-        self.logger.info("batch size " + str(self.batch_size))
-        self.logger.info("patch size " + str(self.patch_size))
-        self.logger.info("Gradient Clipping " + str(self.clip_grads))
-        self.logger.info("With mixed precision " + str(self.with_apex))
-        self.logger.info("With MIP " + str(self.with_mip))
-        if self.with_mip:
-            self.logger.info("MIP axis " + str(self.mip_axis))
-            self.logger.info("floss coefficient " + str(self.floss_coeff))
-            self.logger.info("mip loss coefficient " + str(self.mip_loss_coeff))
+        if self.logger is not None:
+            self.logger.info("learning rate " + str(self.lr_1))
+            self.logger.info("Number of folds " + str(self.k_folds))
+            self.logger.info("batch size " + str(self.batch_size))
+            self.logger.info("patch size " + str(self.patch_size))
+            self.logger.info("Gradient Clipping " + str(self.clip_grads))
+            self.logger.info("With mixed precision " + str(self.with_apex))
+            self.logger.info("With MIP " + str(self.with_mip))
+            if self.with_mip:
+                self.logger.info("MIP axis " + str(self.mip_axis))
+                self.logger.info("floss coefficient " + str(self.floss_coeff))
+                self.logger.info("mip loss coefficient " + str(self.mip_loss_coeff))
 
         # set probabilistic property
         if "Models.prob" in self.model.__module__:
@@ -728,6 +729,7 @@ class CrossValidationPipeline:
 
         with torch.no_grad():
             for test_subject in test_subjects:
+                affine = test_subject['img'][tio.AFFINE]
                 if 'label' in test_subject:
                     label = test_subject['label'][tio.DATA].float().squeeze().numpy()
                     del test_subject['label']
@@ -784,7 +786,7 @@ class CrossValidationPipeline:
                     df = pd.concat([df, datum], ignore_index=True)
 
                 if save_results:
-                    save_nifti(result, os.path.join(result_root, subjectname + ".nii.gz"))
+                    save_nifti(result, os.path.join(result_root, subjectname + ".nii.gz"), affine=affine)
 
                     result_mip = np.max(result, axis=-1)
                     Image.fromarray((result_mip * 255).astype('uint8'), 'L').save(
