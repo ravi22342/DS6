@@ -200,6 +200,10 @@ if __name__ == '__main__':
                         type=int,
                         default=5,
                         help="Set the number of folds for cross validation")
+    parser.add_argument("-fold_index",
+                        type=str,
+                        default="",
+                        help="Set the number of folds for cross validation")
 
     parser.add_argument("-wandb",
                         default=False,
@@ -303,7 +307,7 @@ if __name__ == '__main__':
 
     # loading existing checkpoint if supplied
     if str(args.pre_train).lower() == "true":
-        pipeline.load(checkpoint_path=LOAD_PATH, load_best=args.load_best)
+        pipeline.load(checkpoint_path=LOAD_PATH, load_best=args.load_best, fold_index=args.fold_index)
 
     if str(args.train).lower() == "true":
         pipeline.train()
@@ -312,10 +316,10 @@ if __name__ == '__main__':
     if str(args.test).lower() == "true":
         if str(args.load_best).lower() == "true":
             if bool(LOAD_PATH):
-                pipeline.load(checkpoint_path=LOAD_PATH, load_best=args.load_best)
+                pipeline.load(checkpoint_path=LOAD_PATH, load_best=args.load_best, fold_index=args.fold_index)
             else:
                 pipeline.load(load_best=args.load_best)
-        pipeline.test(test_logger=test_logger)
+        pipeline.test(test_logger=test_logger, fold_index=args.fold_index)
         torch.cuda.empty_cache()  # to avoid memory errors
 
     if str(args.eval).lower() == "true":
