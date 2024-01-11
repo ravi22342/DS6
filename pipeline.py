@@ -270,22 +270,24 @@ class Pipeline:
             batch[i] = batch[i] / batch[i].max()
         return batch
 
-    def load(self, checkpoint_path=None, load_best=True):
+    def load(self, checkpoint_path=None, load_best=True, fold_index=""):
         """
         Purpose: Continue training from previous checkpoint or load an existing checkpoint for testing
         :param checkpoint_path: Path to the saved network state dictionary. If not specified, the path to checkpoint
         location of current directory is used.
         :param load_best: If set, uses best checkpoint from the checkpoint location. Otherwise uses last checkpoint.
+        :param fold_index: If the model was trained with cross validation, the fold index is passed using this.
         """
         if checkpoint_path is None:
             checkpoint_path = self.checkpoint_path
 
         if self.with_apex:
             self.model, self.optimizer, self.scaler = load_model_with_amp(self.model, self.optimizer, checkpoint_path,
-                                                                          batch_index="best" if load_best else "last")
+                                                                          batch_index="best" if load_best else "last",
+                                                                          fold_index=fold_index)
         else:
             self.model, self.optimizer = load_model(self.model, self.optimizer, checkpoint_path,
-                                                    batch_index="best" if load_best else "last")
+                                                    batch_index="best" if load_best else "last", fold_index=fold_index)
 
     def train(self):
         """
